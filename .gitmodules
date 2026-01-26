@@ -1,0 +1,6 @@
+[submodule "vendor/EL_ui"]
+	path = vendor/EL_ui
+	url = https://github.com/elevenlabs/ui
+[submodule "vendor/EL_nextjs-starter"]
+	path = vendor/EL_nextjs-starter
+	url = https://github.com/elevenlabs/elevenlabs-nextjs-starter
