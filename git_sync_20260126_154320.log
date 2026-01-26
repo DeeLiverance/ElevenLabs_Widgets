@@ -1,0 +1,6 @@
+[2026-01-26 15:43:21] [Info] No commits in repository. Will guide through initial commit.
+[2026-01-26 15:43:21] [Info] No remote repository is configured for this project.
+[2026-01-26 15:43:35] [Info] Creating GitHub repository 'elevenlabs_widgets'...
+[2026-01-26 15:43:55] [Error] Failed to create GitHub repository: GitHub token is required
+[2026-01-26 15:44:01] [Warning] No remote URL provided. You can add it later with 'git remote add origin <url>'
+[2026-01-26 15:44:01] [Info] Staging all changes for commit...
