@@ -19,8 +19,14 @@ cd elevenlabs-nextjs-starter
 cp .env.example .env
 ```
 
-- ELEVENLABS_API_KEY: Get your API key from [ElevenLabs](https://elevenlabs.io/app/settings/api-keys)
-- IRON_SESSION_SECRET_KEY: Generate using `openssl rand -base64 32`
+Configure the required environment variables in `.env`:
+
+- ELEVENLABS_API_KEY: Get your API key from [ElevenLabs](https://elevenlabs.io/app/settings/api-keys) and replace the placeholder.
+- IRON_SESSION_SECRET_KEY: Generate a secure secret (32+ characters) and replace `<secret-key-goes-here>`:
+  ```bash
+  openssl rand -base64 32
+  ```
+  Example: `IRON_SESSION_SECRET_KEY=7Y3kZ9vL2xQ5fR8hT1wN6pG4cD0sA3jE`
 
 3. Install/run the project
 
