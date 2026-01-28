@@ -3,6 +3,7 @@ import {
   MessageSquareQuote,
   MessagesSquare,
   Music,
+  PhoneCall,
   Sparkles,
   Users,
 } from 'lucide-react';
@@ -55,6 +56,12 @@ export const demos: { name: string; items: Demo[] }[] = [
         icon: MessagesSquare,
         slug: 'conversational-ai',
         description: 'Build life-like conversational agents.',
+      },
+      {
+        name: 'Voice Agent Widget',
+        icon: PhoneCall,
+        slug: 'voice-agent',
+        description: 'White-label voice agent widget UI.',
       },
     ],
   },
