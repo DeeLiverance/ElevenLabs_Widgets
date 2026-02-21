@@ -90,6 +90,7 @@ export interface ConvAIWidgetEmbedProps {
   providerFontSize?: number;
   providerOffsetY?: number;
   poweredByTextOverride?: string;
+  orbDebug?: boolean;
   inputBoxShrinkPx?: number;
   inputTextLiftPx?: number;
   className?: string;
@@ -426,6 +427,80 @@ function tuneBottomInputBox(
   }
 }
 
+function rectSignature(rect: DOMRect | DOMRectReadOnly) {
+  return `${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.width)},${Math.round(rect.height)}`;
+}
+
+function findLikelyOrbCandidate(shadowRoot: ShadowRoot, panelRect: DOMRect | null) {
+  let best:
+    | {
+        element: HTMLElement;
+        rect: DOMRect;
+        score: number;
+      }
+    | null = null;
+
+  const elements = Array.from(shadowRoot.querySelectorAll<HTMLElement>('*'));
+  for (const element of elements) {
+    const style = window.getComputedStyle(element);
+    if (
+      style.display === 'none' ||
+      style.visibility === 'hidden' ||
+      Number(style.opacity || '1') <= 0
+    ) {
+      continue;
+    }
+
+    const rect = element.getBoundingClientRect();
+    if (rect.width < 72 || rect.height < 72) continue;
+    if (rect.width > window.innerWidth * 0.9 || rect.height > window.innerHeight * 0.9) continue;
+
+    const maxDim = Math.max(rect.width, rect.height);
+    const minDim = Math.min(rect.width, rect.height);
+    const aspectDelta = Math.abs(rect.width - rect.height) / maxDim;
+    if (aspectDelta > 0.22) continue;
+
+    if (panelRect) {
+      const inPanelBounds =
+        rect.left >= panelRect.left - 4 &&
+        rect.right <= panelRect.right + 4 &&
+        rect.top >= panelRect.top - 4 &&
+        rect.bottom <= panelRect.bottom + 4;
+      if (!inPanelBounds) continue;
+    }
+
+    const borderRadius = Number.parseFloat(style.borderTopLeftRadius || '0');
+    const hasRoundRadius =
+      borderRadius >= minDim * 0.35 ||
+      style.borderRadius.includes('9999') ||
+      style.borderRadius.includes('%');
+    const hasCanvasOrSvg = Boolean(element.querySelector('canvas, svg'));
+    const hasBackgroundImage = style.backgroundImage && style.backgroundImage !== 'none';
+
+    let score = minDim;
+    score -= aspectDelta * 320;
+    if (hasRoundRadius) score += 80;
+    if (hasCanvasOrSvg) score += 48;
+    if (hasBackgroundImage) score += 36;
+
+    if (panelRect) {
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const panelCenterX = panelRect.left + panelRect.width / 2;
+      const normalizedY = (centerY - panelRect.top) / Math.max(1, panelRect.height);
+
+      score -= Math.abs(centerX - panelCenterX) * 0.35;
+      score -= Math.abs(normalizedY - 0.42) * 140;
+    }
+
+    if (!best || score > best.score) {
+      best = { element, rect, score };
+    }
+  }
+
+  return best;
+}
+
 export function dispatchConvAIExpandAction(action: ExpandAction) {
   if (typeof window === 'undefined') return;
 
@@ -471,6 +546,7 @@ export function ConvAIWidgetEmbed({
   providerFontSize = 11,
   providerOffsetY = 6,
   poweredByTextOverride,
+  orbDebug = false,
   inputBoxShrinkPx = 6,
   inputTextLiftPx = 6,
   className,
@@ -580,6 +656,8 @@ export function ConvAIWidgetEmbed({
     const providerIcon = document.createElement('img');
     const providerLabel = document.createElement('span');
     providerLabel.textContent = providerText ?? '';
+    const orbDebugOverlay = document.createElement('div');
+    const orbDebugLabel = document.createElement('div');
 
     providerOverlay.style.display = 'none';
     providerOverlay.style.position = 'fixed';
@@ -616,12 +694,33 @@ export function ConvAIWidgetEmbed({
       providerOverlay.style.textDecoration = 'none';
     }
 
+    orbDebugOverlay.style.position = 'fixed';
+    orbDebugOverlay.style.zIndex = '2147483647';
+    orbDebugOverlay.style.pointerEvents = 'none';
+    orbDebugOverlay.style.display = 'none';
+    orbDebugOverlay.style.border = '2px dashed #22c55e';
+    orbDebugOverlay.style.borderRadius = '9999px';
+    orbDebugOverlay.style.boxShadow = '0 0 0 1px rgba(0, 0, 0, 0.12)';
+    orbDebugOverlay.style.background = 'rgba(34, 197, 94, 0.08)';
+
+    orbDebugLabel.style.position = 'fixed';
+    orbDebugLabel.style.zIndex = '2147483647';
+    orbDebugLabel.style.pointerEvents = 'none';
+    orbDebugLabel.style.display = 'none';
+    orbDebugLabel.style.padding = '4px 6px';
+    orbDebugLabel.style.borderRadius = '6px';
+    orbDebugLabel.style.background = 'rgba(15, 23, 42, 0.92)';
+    orbDebugLabel.style.color = '#ffffff';
+    orbDebugLabel.style.font = '11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace';
+    orbDebugLabel.style.whiteSpace = 'nowrap';
+
     let shadowObserver: MutationObserver | null = null;
     const poweredByOverrideText = poweredByTextOverride?.trim();
+    let lastOrbDebugSignature = '';
     const shouldTrackWidgetMutations = Boolean(
-      secondaryLogoUrl || providerText || poweredByOverrideText
+      secondaryLogoUrl || providerText || poweredByOverrideText || orbDebug
     );
-    const shouldHandleResize = Boolean(secondaryLogoUrl || providerText);
+    const shouldHandleResize = Boolean(secondaryLogoUrl || providerText || orbDebug);
     const updateSecondaryLogoPosition = () => {
       const shadowRoot = widgetElement.shadowRoot;
       if (!secondaryLogoUrl || !shadowRoot) {
@@ -631,7 +730,13 @@ export function ConvAIWidgetEmbed({
         providerOverlay.style.display = 'none';
       }
 
-      if (!shadowRoot) return;
+      if (!shadowRoot) {
+        if (orbDebug) {
+          orbDebugOverlay.style.display = 'none';
+          orbDebugLabel.style.display = 'none';
+        }
+        return;
+      }
       if (poweredByOverrideText) {
         overridePoweredByLabel(shadowRoot, poweredByOverrideText);
       }
@@ -656,6 +761,55 @@ export function ConvAIWidgetEmbed({
       }
 
       const panelRect = findExpandedPanelRect(shadowRoot);
+      if (orbDebug) {
+        const candidate = findLikelyOrbCandidate(shadowRoot, panelRect);
+        if (candidate) {
+          const rect = candidate.rect;
+          orbDebugOverlay.style.left = `${Math.round(rect.left)}px`;
+          orbDebugOverlay.style.top = `${Math.round(rect.top)}px`;
+          orbDebugOverlay.style.width = `${Math.round(rect.width)}px`;
+          orbDebugOverlay.style.height = `${Math.round(rect.height)}px`;
+          orbDebugOverlay.style.display = 'block';
+
+          const labelLeft = panelRect ? panelRect.left + 8 : rect.left;
+          const labelTop = panelRect ? panelRect.top + 8 : Math.max(8, rect.top - 24);
+          orbDebugLabel.style.left = `${Math.round(labelLeft)}px`;
+          orbDebugLabel.style.top = `${Math.round(labelTop)}px`;
+          orbDebugLabel.textContent = `orb ${Math.round(rect.left)},${Math.round(rect.top)} ${Math.round(rect.width)}x${Math.round(rect.height)} score=${candidate.score.toFixed(1)}`;
+          orbDebugLabel.style.display = 'block';
+
+          const nextSignature = `${rectSignature(rect)}|${panelRect ? rectSignature(panelRect) : 'no-panel'}`;
+          if (nextSignature !== lastOrbDebugSignature) {
+            lastOrbDebugSignature = nextSignature;
+            console.info('[convai-orb-debug]', {
+              rect: {
+                left: Math.round(rect.left),
+                top: Math.round(rect.top),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height),
+              },
+              panel: panelRect
+                ? {
+                    left: Math.round(panelRect.left),
+                    top: Math.round(panelRect.top),
+                    width: Math.round(panelRect.width),
+                    height: Math.round(panelRect.height),
+                  }
+                : null,
+              tag: candidate.element.tagName.toLowerCase(),
+            });
+          }
+        } else {
+          orbDebugOverlay.style.display = 'none';
+          orbDebugLabel.style.display = 'block';
+          if (panelRect) {
+            orbDebugLabel.style.left = `${Math.round(panelRect.left + 8)}px`;
+            orbDebugLabel.style.top = `${Math.round(panelRect.top + 8)}px`;
+          }
+          orbDebugLabel.textContent = 'orb not found';
+        }
+      }
+
       if (panelRect) {
         tuneBottomInputBox(shadowRoot, panelRect, inputBoxShrinkPx, inputTextLiftPx);
 
@@ -715,6 +869,10 @@ export function ConvAIWidgetEmbed({
       if (providerText) {
         document.body.appendChild(providerOverlay);
       }
+      if (orbDebug) {
+        document.body.appendChild(orbDebugOverlay);
+        document.body.appendChild(orbDebugLabel);
+      }
       updateSecondaryLogoPosition();
 
       if (widgetElement.shadowRoot) {
@@ -748,6 +906,12 @@ export function ConvAIWidgetEmbed({
       }
       if (providerOverlay.parentNode) {
         providerOverlay.parentNode.removeChild(providerOverlay);
+      }
+      if (orbDebugOverlay.parentNode) {
+        orbDebugOverlay.parentNode.removeChild(orbDebugOverlay);
+      }
+      if (orbDebugLabel.parentNode) {
+        orbDebugLabel.parentNode.removeChild(orbDebugLabel);
       }
 
       if (containerElement.contains(widgetElement)) {
@@ -786,6 +950,7 @@ export function ConvAIWidgetEmbed({
     providerFontSize,
     providerOffsetY,
     poweredByTextOverride,
+    orbDebug,
     inputBoxShrinkPx,
     inputTextLiftPx,
     serverLocation,

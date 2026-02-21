@@ -111,6 +111,7 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
   const [dismissible, setDismissible] = React.useState(true);
   const [actionText, setActionText] = React.useState('Talk to us');
   const [expandText, setExpandText] = React.useState('Need help?');
+  const [orbDebug, setOrbDebug] = React.useState(false);
   const [avatarImageUrl, setAvatarImageUrl] = React.useState('');
   const [secondaryLogoUrl, setSecondaryLogoUrl] = React.useState('');
   const [secondaryLogoLoadError, setSecondaryLogoLoadError] = React.useState<string | null>(null);
@@ -325,6 +326,20 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
               id="dismissible"
               checked={dismissible}
               onCheckedChange={(checked) => setDismissible(Boolean(checked))}
+            />
+          </div>
+
+          <div className="flex items-end justify-between rounded-md border p-3 md:col-span-2">
+            <div className="space-y-1">
+              <Label htmlFor="orb-debug">Orb debug mode</Label>
+              <p className="text-muted-foreground text-xs">
+                Highlights detected orb bounds and logs position changes to browser console.
+              </p>
+            </div>
+            <Switch
+              id="orb-debug"
+              checked={orbDebug}
+              onCheckedChange={(checked) => setOrbDebug(Boolean(checked))}
             />
           </div>
 
@@ -803,6 +818,7 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
           providerIconSize={12}
           providerOffsetY={8}
           poweredByTextOverride="Powered by GRABiT-Labs"
+          orbDebug={orbDebug}
           inputBoxShrinkPx={6}
           inputTextLiftPx={6}
           dynamicVariables={dynamicVariablesResult.value}
