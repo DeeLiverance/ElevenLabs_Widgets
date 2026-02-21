@@ -286,8 +286,9 @@ function Initialize-GitRepository {
             }
             
             # Set upstream branch
-            $defaultBranch = git symbolic-ref --short HEAD
+            $defaultBranch = (git symbolic-ref --short HEAD).Trim()
             if (-not $defaultBranch) { $defaultBranch = "main" }
+            $defaultBranch = Resolve-SyncBranch -Remote "origin" -CurrentBranch $defaultBranch
             
             # Configure GitHub CLI to use SSH if available
             if (Test-GitHubCli) {
@@ -345,6 +346,86 @@ function Get-GitStatus {
     }
 }
 
+function Get-RemoteDefaultBranch {
+    param(
+        [string]$Remote = "origin"
+    )
+
+    try {
+        git fetch $Remote --prune 2>$null | Out-Null
+
+        $remoteHead = (git symbolic-ref --quiet --short "refs/remotes/$Remote/HEAD" 2>$null).Trim()
+        if ($LASTEXITCODE -eq 0 -and $remoteHead) {
+            $escapedRemote = [System.Text.RegularExpressions.Regex]::Escape("$Remote/")
+            if ($remoteHead -match "^$escapedRemote(.+)$") {
+                return $matches[1]
+            }
+        }
+
+        foreach ($candidate in @("main", "master")) {
+            git show-ref --verify --quiet "refs/remotes/$Remote/$candidate" 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                return $candidate
+            }
+        }
+
+        return $null
+    } catch {
+        return $null
+    }
+}
+
+function Resolve-SyncBranch {
+    param(
+        [string]$Remote = "origin",
+        [string]$CurrentBranch
+    )
+
+    if (-not $CurrentBranch) {
+        return $CurrentBranch
+    }
+
+    $remoteDefaultBranch = Get-RemoteDefaultBranch -Remote $Remote
+    if (-not $remoteDefaultBranch) {
+        return $CurrentBranch
+    }
+
+    git show-ref --verify --quiet "refs/remotes/$Remote/$CurrentBranch" 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        return $CurrentBranch
+    }
+
+    if ($CurrentBranch -eq $remoteDefaultBranch) {
+        return $CurrentBranch
+    }
+
+    Write-Log "Remote branch '$Remote/$CurrentBranch' not found. Using '$remoteDefaultBranch' instead." "Warning"
+
+    git show-ref --verify --quiet "refs/heads/$remoteDefaultBranch" 2>$null
+    $localDefaultExists = $LASTEXITCODE -eq 0
+
+    if ($localDefaultExists) {
+        Write-Log "Switching local branch to '$remoteDefaultBranch'..." "Info"
+        git checkout $remoteDefaultBranch 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to switch to local branch '$remoteDefaultBranch'"
+        }
+    } else {
+        Write-Log "Renaming local branch '$CurrentBranch' to '$remoteDefaultBranch'..." "Info"
+        git branch -m $remoteDefaultBranch 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to rename local branch '$CurrentBranch' to '$remoteDefaultBranch'"
+        }
+    }
+
+    git show-ref --verify --quiet "refs/remotes/$Remote/$remoteDefaultBranch" 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        git branch --set-upstream-to="$Remote/$remoteDefaultBranch" $remoteDefaultBranch 2>$null | Out-Null
+    }
+
+    return $remoteDefaultBranch
+}
+
 function Invoke-GitPull {
     param(
         [string]$Remote = "origin",
@@ -362,6 +443,21 @@ function Invoke-GitPull {
                 return $true
             }
             
+            if ($pullOutput -match "couldn't find remote ref") {
+                $fallbackBranch = Get-RemoteDefaultBranch -Remote $Remote
+                if ($fallbackBranch -and $fallbackBranch -ne $Branch) {
+                    Write-Log "Remote branch '$Remote/$Branch' not found. Retrying with '$Remote/$fallbackBranch'." "Warning"
+                    $Branch = $fallbackBranch
+                    continue
+                }
+
+                $remoteHeads = git ls-remote --heads $Remote 2>$null
+                if ([string]::IsNullOrWhiteSpace($remoteHeads)) {
+                    Write-Log "Remote '$Remote' has no branches yet. Skipping pull." "Info"
+                    return $true
+                }
+            }
+
             if ($pullOutput -match "CONFLICT") {
                 Write-Log "Merge conflict detected. Please resolve conflicts and run the script again." "Error"
                 Write-Log "Conflict details: $pullOutput" "Debug"
@@ -553,8 +649,8 @@ try {
 
     # Get current branch info
     $branchInfo = Get-GitBranchInfo
-    $currentBranch = $branchInfo.Branch
-    $commitHash = $branchInfo.CommitHash
+    $currentBranch = Resolve-SyncBranch -Remote "origin" -CurrentBranch $branchInfo.Branch
+    $commitHash = git rev-parse --short HEAD
 
     Write-Log "Starting Git Sync on branch: $currentBranch (Commit: $commitHash)" "Info"
 
@@ -591,6 +687,7 @@ try {
             }
             
             $localBranch = git rev-parse --abbrev-ref HEAD
+            $localBranch = Resolve-SyncBranch -Remote "origin" -CurrentBranch $localBranch
             $localCommit = git rev-parse $localBranch
             $remoteCommit = git rev-parse "origin/$localBranch" 2>$null
             
