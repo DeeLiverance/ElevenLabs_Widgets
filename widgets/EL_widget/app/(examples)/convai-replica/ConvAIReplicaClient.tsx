@@ -20,6 +20,10 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  convaiReplicaPresets,
+  type ConvAIReplicaPresetSettings,
+} from '@/lib/convai-replica-presets';
 
 const variantOptions = ['tiny', 'compact', 'expanded', 'full'] as const;
 type VariantOption = (typeof variantOptions)[number];
@@ -100,33 +104,8 @@ type EventLogItem = {
 
 const PLAYGROUND_SETTINGS_STORAGE_KEY = 'convai-replica-playground-settings-v1';
 
-type ConvAIReplicaSettings = {
-  agentId: string;
-  variant: VariantOption;
-  placement: PlacementOption;
-  conversationMode: ConversationModeOption;
-  dismissible: boolean;
-  actionText: string;
-  expandText: string;
-  orbDebug: boolean;
-  avatarImageUrl: string;
-  secondaryLogoUrl: string;
-  secondaryLogoSize: number;
-  secondaryLogoOffsetX: number;
-  secondaryLogoOffsetY: number;
-  secondaryLogoRounded: boolean;
-  secondaryLogoShadow: boolean;
-  useOrbColors: boolean;
-  avatarOrbColor1: string;
-  avatarOrbColor2: string;
-  useWidgetThemeColors: boolean;
-  widgetBaseColor: string;
-  widgetBasePrimaryColor: string;
-  widgetBaseBorderColor: string;
-  widgetBaseSubtleColor: string;
-  widgetAccentColor: string;
-  widgetAccentPrimaryColor: string;
-  dynamicVariablesInput: string;
+type ConvAIReplicaSettings = ConvAIReplicaPresetSettings & {
+  repoPresetId?: string;
 };
 
 function parseDynamicVariables(rawInput: string): { value?: Record<string, string>; error?: string } {
@@ -195,6 +174,9 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
   const [eventLog, setEventLog] = React.useState<EventLogItem[]>([]);
   const [saveStatus, setSaveStatus] = React.useState<string | null>(null);
   const [hasHydratedSavedSettings, setHasHydratedSavedSettings] = React.useState(false);
+  const [selectedRepoPresetId, setSelectedRepoPresetId] = React.useState(
+    convaiReplicaPresets[0]?.id ?? ''
+  );
   const eventLogIdRef = React.useRef(0);
   const saveStatusTimeoutRef = React.useRef<number | null>(null);
 
@@ -234,6 +216,11 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
     widgetBaseSubtleColor,
   ]);
 
+  const selectedRepoPreset = React.useMemo(
+    () => convaiReplicaPresets.find((preset) => preset.id === selectedRepoPresetId),
+    [selectedRepoPresetId]
+  );
+
   const widgetThemeColors = React.useMemo<ConvAIWidgetThemeColors | undefined>(() => {
     if (!useWidgetThemeColors) {
       return undefined;
@@ -265,6 +252,12 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
 
   const applySavedSettings = React.useCallback(
     (saved: Partial<ConvAIReplicaSettings>) => {
+      if (
+        typeof saved.repoPresetId === 'string' &&
+        convaiReplicaPresets.some((preset) => preset.id === saved.repoPresetId)
+      ) {
+        setSelectedRepoPresetId(saved.repoPresetId);
+      }
       if (typeof saved.agentId === 'string') setAgentIdInput(saved.agentId);
       if (saved.variant && variantOptions.includes(saved.variant as VariantOption)) {
         setVariant(saved.variant as VariantOption);
@@ -315,11 +308,12 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       setAvatarLoadError(null);
       setSecondaryLogoLoadError(null);
     },
-    [setVariant]
+    []
   );
 
   const settingsSnapshot = React.useMemo<ConvAIReplicaSettings>(
     () => ({
+      repoPresetId: selectedRepoPresetId,
       agentId: resolvedAgentId,
       variant,
       placement,
@@ -348,6 +342,7 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       dynamicVariablesInput,
     }),
     [
+      selectedRepoPresetId,
       resolvedAgentId,
       variant,
       placement,
@@ -387,6 +382,32 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       saveStatusTimeoutRef.current = null;
     }, 2600);
   }, []);
+
+  const handleApplyRepoPreset = React.useCallback(() => {
+    if (!selectedRepoPresetId) {
+      setTemporaryStatus('Pick a preset first.');
+      return;
+    }
+
+    const preset = convaiReplicaPresets.find((item) => item.id === selectedRepoPresetId);
+    if (!preset) {
+      setTemporaryStatus('Preset not found in repo.');
+      return;
+    }
+
+    applySavedSettings(preset.settings);
+    setTemporaryStatus(`Repo preset loaded: ${preset.label}.`);
+  }, [applySavedSettings, selectedRepoPresetId, setTemporaryStatus]);
+
+  const handleCopySettingsJson = React.useCallback(async () => {
+    if (typeof window === 'undefined') return;
+    try {
+      await window.navigator.clipboard.writeText(JSON.stringify(settingsSnapshot, null, 2));
+      setTemporaryStatus('Settings JSON copied. Add it to lib/convai-replica-presets.ts.');
+    } catch {
+      setTemporaryStatus('Could not copy settings JSON.');
+    }
+  }, [settingsSnapshot, setTemporaryStatus]);
 
   const handleSaveSettings = React.useCallback(() => {
     if (typeof window === 'undefined') return;
@@ -547,6 +568,36 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       </div>
 
       <Card className="space-y-4 p-4">
+        <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+          <div className="space-y-2">
+            <Label htmlFor="repo-preset">Repo preset</Label>
+            <Select value={selectedRepoPresetId} onValueChange={setSelectedRepoPresetId}>
+              <SelectTrigger id="repo-preset" className="w-full">
+                <SelectValue placeholder="Choose a repo preset" />
+              </SelectTrigger>
+              <SelectContent>
+                {convaiReplicaPresets.map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-xs">
+              {selectedRepoPreset?.description ??
+                'Choose a source-controlled preset from lib/convai-replica-presets.ts.'}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" onClick={handleApplyRepoPreset}>
+              Apply preset
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => void handleCopySettingsJson()}>
+              Copy settings JSON
+            </Button>
+          </div>
+        </div>
+
         <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
           <div className="space-y-2">
             <Label htmlFor="agent-id-input">ElevenLabs agent ID</Label>
