@@ -638,6 +638,15 @@ export function ConvAIWidgetEmbed({
     window.addEventListener(CALL_EVENT_NAME, handleCallEvent as EventListener);
     containerElement.replaceChildren(widgetElement);
 
+    const enforceSelectedVariant = () => {
+      const selectedVariant = variant?.trim();
+      if (!selectedVariant) return;
+      if (widgetElement.getAttribute('variant') !== selectedVariant) {
+        widgetElement.setAttribute('variant', selectedVariant);
+      }
+    };
+    enforceSelectedVariant();
+
     const logoOverlay = document.createElement('img');
     logoOverlay.alt = secondaryLogoAlt;
     logoOverlay.style.position = 'fixed';
@@ -722,6 +731,8 @@ export function ConvAIWidgetEmbed({
     );
     const shouldHandleResize = Boolean(secondaryLogoUrl || providerText || orbDebug);
     const updateSecondaryLogoPosition = () => {
+      enforceSelectedVariant();
+
       const shadowRoot = widgetElement.shadowRoot;
       if (!secondaryLogoUrl || !shadowRoot) {
         logoOverlay.style.display = 'none';

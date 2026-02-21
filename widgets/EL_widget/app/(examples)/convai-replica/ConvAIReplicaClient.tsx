@@ -151,21 +151,21 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
   const [secondaryLogoRounded, setSecondaryLogoRounded] = React.useState(true);
   const [secondaryLogoShadow, setSecondaryLogoShadow] = React.useState(true);
   const [useOrbColors, setUseOrbColors] = React.useState(true);
-  const [avatarOrbColor1, setAvatarOrbColor1] = React.useState(colorPresets[0].color1);
-  const [avatarOrbColor2, setAvatarOrbColor2] = React.useState(colorPresets[0].color2);
+  const [avatarOrbColor1, setAvatarOrbColor1] = React.useState<string>(colorPresets[0].color1);
+  const [avatarOrbColor2, setAvatarOrbColor2] = React.useState<string>(colorPresets[0].color2);
   const [useWidgetThemeColors, setUseWidgetThemeColors] = React.useState(true);
-  const [widgetBaseColor, setWidgetBaseColor] = React.useState(widgetThemePresets[0].base);
-  const [widgetBasePrimaryColor, setWidgetBasePrimaryColor] = React.useState(
+  const [widgetBaseColor, setWidgetBaseColor] = React.useState<string>(widgetThemePresets[0].base);
+  const [widgetBasePrimaryColor, setWidgetBasePrimaryColor] = React.useState<string>(
     widgetThemePresets[0].basePrimary
   );
-  const [widgetBaseBorderColor, setWidgetBaseBorderColor] = React.useState(
+  const [widgetBaseBorderColor, setWidgetBaseBorderColor] = React.useState<string>(
     widgetThemePresets[0].baseBorder
   );
-  const [widgetBaseSubtleColor, setWidgetBaseSubtleColor] = React.useState(
+  const [widgetBaseSubtleColor, setWidgetBaseSubtleColor] = React.useState<string>(
     widgetThemePresets[0].baseSubtle
   );
-  const [widgetAccentColor, setWidgetAccentColor] = React.useState(widgetThemePresets[0].accent);
-  const [widgetAccentPrimaryColor, setWidgetAccentPrimaryColor] = React.useState(
+  const [widgetAccentColor, setWidgetAccentColor] = React.useState<string>(widgetThemePresets[0].accent);
+  const [widgetAccentPrimaryColor, setWidgetAccentPrimaryColor] = React.useState<string>(
     widgetThemePresets[0].accentPrimary
   );
   const [avatarLoadError, setAvatarLoadError] = React.useState<string | null>(null);
@@ -174,6 +174,7 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
   );
   const [eventLog, setEventLog] = React.useState<EventLogItem[]>([]);
   const [saveStatus, setSaveStatus] = React.useState<string | null>(null);
+  const [hasHydratedSavedSettings, setHasHydratedSavedSettings] = React.useState(false);
   const eventLogIdRef = React.useRef(0);
   const saveStatusTimeoutRef = React.useRef<number | null>(null);
 
@@ -388,15 +389,34 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
     const raw = window.localStorage.getItem(PLAYGROUND_SETTINGS_STORAGE_KEY);
-    if (!raw) return;
+    if (!raw) {
+      setHasHydratedSavedSettings(true);
+      return;
+    }
 
     try {
       const parsed = JSON.parse(raw) as Partial<ConvAIReplicaSettings>;
       applySavedSettings(parsed);
     } catch {
       // Ignore malformed stored payloads and keep current defaults.
+    } finally {
+      setHasHydratedSavedSettings(true);
     }
   }, [applySavedSettings]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!hasHydratedSavedSettings) return;
+
+    try {
+      window.localStorage.setItem(
+        PLAYGROUND_SETTINGS_STORAGE_KEY,
+        JSON.stringify(settingsSnapshot)
+      );
+    } catch {
+      setTemporaryStatus('Could not auto-save settings (local storage unavailable).');
+    }
+  }, [hasHydratedSavedSettings, settingsSnapshot, setTemporaryStatus]);
 
   React.useEffect(() => {
     return () => {
@@ -1034,7 +1054,7 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
             providerUrl="https://wingspanai.com.au"
             providerIconUrl="/wingspan-favicon.ico"
             providerIconSize={12}
-            providerOffsetY={8}
+            providerOffsetY={6}
             poweredByTextOverride="Powered by GRABiT-Labs"
             orbDebug={orbDebug}
             inputBoxShrinkPx={6}
