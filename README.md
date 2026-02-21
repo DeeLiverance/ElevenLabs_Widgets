@@ -23,5 +23,8 @@ live in `widgets/`.
 - Update a submodule:
   - `cd` into the submodule and run `git pull`, then commit the updated pointer
     in this repo.
+- Re-apply branding overrides after vendor updates:
+  - `powershell -ExecutionPolicy Bypass -File .\scripts\apply-branding-overrides.ps1`
+  - Check drift only: `powershell -ExecutionPolicy Bypass -File .\scripts\apply-branding-overrides.ps1 -CheckOnly`
 - Run a project:
   - Follow the README inside each folder for prerequisites and commands.
