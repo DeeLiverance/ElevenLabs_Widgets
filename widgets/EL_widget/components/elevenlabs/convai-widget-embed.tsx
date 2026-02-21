@@ -14,6 +14,13 @@ const INPUT_BASE_PADDING_BOTTOM_ATTR = 'data-codex-input-base-padding-bottom';
 const POWERED_BY_ELEVENLABS_PATTERN = /powered\s+by\s+elevenlabs\s+agents?/i;
 
 type WidgetVariant = 'tiny' | 'compact' | 'full' | 'expanded';
+type WidgetPlacement =
+  | 'top-left'
+  | 'top'
+  | 'top-right'
+  | 'bottom-left'
+  | 'bottom'
+  | 'bottom-right';
 type ExpandAction = 'expand' | 'collapse' | 'toggle';
 
 type ThemeColorKey =
@@ -58,6 +65,7 @@ declare global {
 export interface ConvAIWidgetEmbedProps {
   agentId: string;
   variant?: WidgetVariant;
+  placement?: WidgetPlacement;
   dismissible?: boolean;
   serverLocation?: string;
   actionText?: string;
@@ -514,6 +522,7 @@ export function dispatchConvAIExpandAction(action: ExpandAction) {
 export function ConvAIWidgetEmbed({
   agentId,
   variant = 'compact',
+  placement,
   dismissible = true,
   serverLocation,
   actionText,
@@ -596,6 +605,7 @@ export function ConvAIWidgetEmbed({
     widgetElement.setAttribute('agent-id', agentId);
 
     setOptionalAttribute(widgetElement, 'variant', variant);
+    setOptionalAttribute(widgetElement, 'placement', placement);
     setOptionalAttribute(widgetElement, 'server-location', serverLocation);
     setOptionalAttribute(widgetElement, 'action-text', actionText);
     setOptionalAttribute(widgetElement, 'start-call-text', startCallText);
@@ -645,7 +655,15 @@ export function ConvAIWidgetEmbed({
         widgetElement.setAttribute('variant', selectedVariant);
       }
     };
+    const enforceSelectedPlacement = () => {
+      const selectedPlacement = placement?.trim();
+      if (!selectedPlacement) return;
+      if (widgetElement.getAttribute('placement') !== selectedPlacement) {
+        widgetElement.setAttribute('placement', selectedPlacement);
+      }
+    };
     enforceSelectedVariant();
+    enforceSelectedPlacement();
 
     const logoOverlay = document.createElement('img');
     logoOverlay.alt = secondaryLogoAlt;
@@ -732,6 +750,7 @@ export function ConvAIWidgetEmbed({
     const shouldHandleResize = Boolean(secondaryLogoUrl || providerText || orbDebug);
     const updateSecondaryLogoPosition = () => {
       enforceSelectedVariant();
+      enforceSelectedPlacement();
 
       const shadowRoot = widgetElement.shadowRoot;
       if (!secondaryLogoUrl || !shadowRoot) {
@@ -964,6 +983,7 @@ export function ConvAIWidgetEmbed({
     startCallText,
     themeColors,
     variant,
+    placement,
   ]);
 
   if (scriptError) {

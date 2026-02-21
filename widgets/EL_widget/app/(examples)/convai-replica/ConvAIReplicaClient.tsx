@@ -23,6 +23,15 @@ import { Textarea } from '@/components/ui/textarea';
 
 const variantOptions = ['tiny', 'compact', 'expanded', 'full'] as const;
 type VariantOption = (typeof variantOptions)[number];
+const placementOptions = [
+  'top-left',
+  'top',
+  'top-right',
+  'bottom-left',
+  'bottom',
+  'bottom-right',
+] as const;
+type PlacementOption = (typeof placementOptions)[number];
 
 const colorPresets = [
   { id: 'violet', label: 'Violet', color1: '#6D28D9', color2: '#A855F7' },
@@ -88,6 +97,7 @@ const PLAYGROUND_SETTINGS_STORAGE_KEY = 'convai-replica-playground-settings-v1';
 type ConvAIReplicaSettings = {
   agentId: string;
   variant: VariantOption;
+  placement: PlacementOption;
   dismissible: boolean;
   actionText: string;
   expandText: string;
@@ -138,6 +148,7 @@ function parseDynamicVariables(rawInput: string): { value?: Record<string, strin
 export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProps) {
   const [agentIdInput, setAgentIdInput] = React.useState(agentId ?? '');
   const [variant, setVariant] = React.useState<VariantOption>('compact');
+  const [placement, setPlacement] = React.useState<PlacementOption>('bottom-right');
   const [dismissible, setDismissible] = React.useState(true);
   const [actionText, setActionText] = React.useState('Talk to us');
   const [expandText, setExpandText] = React.useState('Need help?');
@@ -245,6 +256,9 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       if (saved.variant && variantOptions.includes(saved.variant as VariantOption)) {
         setVariant(saved.variant as VariantOption);
       }
+      if (saved.placement && placementOptions.includes(saved.placement as PlacementOption)) {
+        setPlacement(saved.placement as PlacementOption);
+      }
       if (typeof saved.dismissible === 'boolean') setDismissible(saved.dismissible);
       if (typeof saved.actionText === 'string') setActionText(saved.actionText);
       if (typeof saved.expandText === 'string') setExpandText(saved.expandText);
@@ -289,6 +303,7 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
     () => ({
       agentId: resolvedAgentId,
       variant,
+      placement,
       dismissible,
       actionText,
       expandText,
@@ -315,6 +330,7 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
     [
       resolvedAgentId,
       variant,
+      placement,
       dismissible,
       actionText,
       expandText,
@@ -546,6 +562,25 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
               </SelectTrigger>
               <SelectContent>
                 {variantOptions.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="placement">Placement</Label>
+            <Select
+              value={placement}
+              onValueChange={(value) => setPlacement(value as PlacementOption)}
+            >
+              <SelectTrigger id="placement" className="w-full">
+                <SelectValue placeholder="Select placement" />
+              </SelectTrigger>
+              <SelectContent>
+                {placementOptions.map((option) => (
                   <SelectItem key={option} value={option}>
                     {option}
                   </SelectItem>
@@ -1037,6 +1072,7 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
           <ConvAIWidgetEmbed
             agentId={resolvedAgentId}
             variant={variant}
+            placement={placement}
             dismissible={dismissible}
             actionText={actionText}
             expandText={expandText}
