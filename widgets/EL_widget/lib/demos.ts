@@ -63,6 +63,12 @@ export const demos: { name: string; items: Demo[] }[] = [
         slug: 'voice-agent',
         description: 'White-label voice agent widget UI.',
       },
+      {
+        name: 'ConvAI Widget Replica',
+        icon: PhoneCall,
+        slug: 'convai-replica',
+        description: 'Embed-compatible ConvAI widget baseline with host controls.',
+      },
     ],
   },
 ];
