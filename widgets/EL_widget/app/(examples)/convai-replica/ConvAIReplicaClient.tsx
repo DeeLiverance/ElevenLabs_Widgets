@@ -83,6 +83,35 @@ type EventLogItem = {
   text: string;
 };
 
+const PLAYGROUND_SETTINGS_STORAGE_KEY = 'convai-replica-playground-settings-v1';
+
+type ConvAIReplicaSettings = {
+  agentId: string;
+  variant: VariantOption;
+  dismissible: boolean;
+  actionText: string;
+  expandText: string;
+  orbDebug: boolean;
+  avatarImageUrl: string;
+  secondaryLogoUrl: string;
+  secondaryLogoSize: number;
+  secondaryLogoOffsetX: number;
+  secondaryLogoOffsetY: number;
+  secondaryLogoRounded: boolean;
+  secondaryLogoShadow: boolean;
+  useOrbColors: boolean;
+  avatarOrbColor1: string;
+  avatarOrbColor2: string;
+  useWidgetThemeColors: boolean;
+  widgetBaseColor: string;
+  widgetBasePrimaryColor: string;
+  widgetBaseBorderColor: string;
+  widgetBaseSubtleColor: string;
+  widgetAccentColor: string;
+  widgetAccentPrimaryColor: string;
+  dynamicVariablesInput: string;
+};
+
 function parseDynamicVariables(rawInput: string): { value?: Record<string, string>; error?: string } {
   if (!rawInput.trim()) {
     return {};
@@ -107,6 +136,7 @@ function parseDynamicVariables(rawInput: string): { value?: Record<string, strin
 }
 
 export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProps) {
+  const [agentIdInput, setAgentIdInput] = React.useState(agentId ?? '');
   const [variant, setVariant] = React.useState<VariantOption>('compact');
   const [dismissible, setDismissible] = React.useState(true);
   const [actionText, setActionText] = React.useState('Talk to us');
@@ -117,7 +147,7 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
   const [secondaryLogoLoadError, setSecondaryLogoLoadError] = React.useState<string | null>(null);
   const [secondaryLogoSize, setSecondaryLogoSize] = React.useState(42);
   const [secondaryLogoOffsetX, setSecondaryLogoOffsetX] = React.useState(18);
-  const [secondaryLogoOffsetY, setSecondaryLogoOffsetY] = React.useState(14);
+  const [secondaryLogoOffsetY, setSecondaryLogoOffsetY] = React.useState(51);
   const [secondaryLogoRounded, setSecondaryLogoRounded] = React.useState(true);
   const [secondaryLogoShadow, setSecondaryLogoShadow] = React.useState(true);
   const [useOrbColors, setUseOrbColors] = React.useState(true);
@@ -143,7 +173,9 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
     '{\n  "source": "convai-replica",\n  "build": "baseline"\n}'
   );
   const [eventLog, setEventLog] = React.useState<EventLogItem[]>([]);
+  const [saveStatus, setSaveStatus] = React.useState<string | null>(null);
   const eventLogIdRef = React.useRef(0);
+  const saveStatusTimeoutRef = React.useRef<number | null>(null);
 
   const dynamicVariablesResult = React.useMemo(
     () => parseDynamicVariables(dynamicVariablesInput),
@@ -203,6 +235,176 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
     widgetBasePrimaryColor,
     widgetBaseSubtleColor,
   ]);
+
+  const resolvedAgentId = agentIdInput.trim();
+
+  const applySavedSettings = React.useCallback(
+    (saved: Partial<ConvAIReplicaSettings>) => {
+      if (typeof saved.agentId === 'string') setAgentIdInput(saved.agentId);
+      if (saved.variant && variantOptions.includes(saved.variant as VariantOption)) {
+        setVariant(saved.variant as VariantOption);
+      }
+      if (typeof saved.dismissible === 'boolean') setDismissible(saved.dismissible);
+      if (typeof saved.actionText === 'string') setActionText(saved.actionText);
+      if (typeof saved.expandText === 'string') setExpandText(saved.expandText);
+      if (typeof saved.orbDebug === 'boolean') setOrbDebug(saved.orbDebug);
+      if (typeof saved.avatarImageUrl === 'string') setAvatarImageUrl(saved.avatarImageUrl);
+      if (typeof saved.secondaryLogoUrl === 'string') setSecondaryLogoUrl(saved.secondaryLogoUrl);
+      if (typeof saved.secondaryLogoSize === 'number') {
+        setSecondaryLogoSize(Math.min(120, Math.max(20, Math.round(saved.secondaryLogoSize))));
+      }
+      if (typeof saved.secondaryLogoOffsetX === 'number') {
+        setSecondaryLogoOffsetX(Math.min(240, Math.max(0, Math.round(saved.secondaryLogoOffsetX))));
+      }
+      if (typeof saved.secondaryLogoOffsetY === 'number') {
+        setSecondaryLogoOffsetY(Math.min(240, Math.max(0, Math.round(saved.secondaryLogoOffsetY))));
+      }
+      if (typeof saved.secondaryLogoRounded === 'boolean') setSecondaryLogoRounded(saved.secondaryLogoRounded);
+      if (typeof saved.secondaryLogoShadow === 'boolean') setSecondaryLogoShadow(saved.secondaryLogoShadow);
+      if (typeof saved.useOrbColors === 'boolean') setUseOrbColors(saved.useOrbColors);
+      if (typeof saved.avatarOrbColor1 === 'string') setAvatarOrbColor1(saved.avatarOrbColor1);
+      if (typeof saved.avatarOrbColor2 === 'string') setAvatarOrbColor2(saved.avatarOrbColor2);
+      if (typeof saved.useWidgetThemeColors === 'boolean') setUseWidgetThemeColors(saved.useWidgetThemeColors);
+      if (typeof saved.widgetBaseColor === 'string') setWidgetBaseColor(saved.widgetBaseColor);
+      if (typeof saved.widgetBasePrimaryColor === 'string') {
+        setWidgetBasePrimaryColor(saved.widgetBasePrimaryColor);
+      }
+      if (typeof saved.widgetBaseBorderColor === 'string') setWidgetBaseBorderColor(saved.widgetBaseBorderColor);
+      if (typeof saved.widgetBaseSubtleColor === 'string') setWidgetBaseSubtleColor(saved.widgetBaseSubtleColor);
+      if (typeof saved.widgetAccentColor === 'string') setWidgetAccentColor(saved.widgetAccentColor);
+      if (typeof saved.widgetAccentPrimaryColor === 'string') {
+        setWidgetAccentPrimaryColor(saved.widgetAccentPrimaryColor);
+      }
+      if (typeof saved.dynamicVariablesInput === 'string') {
+        setDynamicVariablesInput(saved.dynamicVariablesInput);
+      }
+      setAvatarLoadError(null);
+      setSecondaryLogoLoadError(null);
+    },
+    [setVariant]
+  );
+
+  const settingsSnapshot = React.useMemo<ConvAIReplicaSettings>(
+    () => ({
+      agentId: resolvedAgentId,
+      variant,
+      dismissible,
+      actionText,
+      expandText,
+      orbDebug,
+      avatarImageUrl,
+      secondaryLogoUrl,
+      secondaryLogoSize,
+      secondaryLogoOffsetX,
+      secondaryLogoOffsetY,
+      secondaryLogoRounded,
+      secondaryLogoShadow,
+      useOrbColors,
+      avatarOrbColor1,
+      avatarOrbColor2,
+      useWidgetThemeColors,
+      widgetBaseColor,
+      widgetBasePrimaryColor,
+      widgetBaseBorderColor,
+      widgetBaseSubtleColor,
+      widgetAccentColor,
+      widgetAccentPrimaryColor,
+      dynamicVariablesInput,
+    }),
+    [
+      resolvedAgentId,
+      variant,
+      dismissible,
+      actionText,
+      expandText,
+      orbDebug,
+      avatarImageUrl,
+      secondaryLogoUrl,
+      secondaryLogoSize,
+      secondaryLogoOffsetX,
+      secondaryLogoOffsetY,
+      secondaryLogoRounded,
+      secondaryLogoShadow,
+      useOrbColors,
+      avatarOrbColor1,
+      avatarOrbColor2,
+      useWidgetThemeColors,
+      widgetBaseColor,
+      widgetBasePrimaryColor,
+      widgetBaseBorderColor,
+      widgetBaseSubtleColor,
+      widgetAccentColor,
+      widgetAccentPrimaryColor,
+      dynamicVariablesInput,
+    ]
+  );
+
+  const setTemporaryStatus = React.useCallback((message: string) => {
+    setSaveStatus(message);
+    if (saveStatusTimeoutRef.current !== null) {
+      window.clearTimeout(saveStatusTimeoutRef.current);
+    }
+    saveStatusTimeoutRef.current = window.setTimeout(() => {
+      setSaveStatus(null);
+      saveStatusTimeoutRef.current = null;
+    }, 2600);
+  }, []);
+
+  const handleSaveSettings = React.useCallback(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(
+        PLAYGROUND_SETTINGS_STORAGE_KEY,
+        JSON.stringify(settingsSnapshot)
+      );
+      setTemporaryStatus('Settings saved to this browser.');
+    } catch {
+      setTemporaryStatus('Could not save settings (local storage unavailable).');
+    }
+  }, [settingsSnapshot, setTemporaryStatus]);
+
+  const handleLoadSettings = React.useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const raw = window.localStorage.getItem(PLAYGROUND_SETTINGS_STORAGE_KEY);
+    if (!raw) {
+      setTemporaryStatus('No saved settings found yet.');
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as Partial<ConvAIReplicaSettings>;
+      applySavedSettings(parsed);
+      setTemporaryStatus('Saved settings loaded.');
+    } catch {
+      setTemporaryStatus('Saved settings are invalid JSON.');
+    }
+  }, [applySavedSettings, setTemporaryStatus]);
+
+  const handleClearSavedSettings = React.useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.removeItem(PLAYGROUND_SETTINGS_STORAGE_KEY);
+    setTemporaryStatus('Saved settings were cleared.');
+  }, [setTemporaryStatus]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const raw = window.localStorage.getItem(PLAYGROUND_SETTINGS_STORAGE_KEY);
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw) as Partial<ConvAIReplicaSettings>;
+      applySavedSettings(parsed);
+    } catch {
+      // Ignore malformed stored payloads and keep current defaults.
+    }
+  }, [applySavedSettings]);
+
+  React.useEffect(() => {
+    return () => {
+      if (saveStatusTimeoutRef.current !== null) {
+        window.clearTimeout(saveStatusTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleCallEvent = React.useCallback((event: Event) => {
     const time = new Date().toLocaleTimeString();
@@ -278,18 +480,6 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
     []
   );
 
-  if (!agentId) {
-    return (
-      <div className="container mx-auto p-6">
-        <h1 className="text-2xl font-bold">ConvAI Widget Replica</h1>
-        <p className="text-muted-foreground">
-          Missing <code>NEXT_PUBLIC_ELEVENLABS_AGENT_ID</code>. Add it to your .env and restart the
-          dev server.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="container mx-auto space-y-6 p-6">
       <div className="space-y-2">
@@ -300,6 +490,33 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       </div>
 
       <Card className="space-y-4 p-4">
+        <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+          <div className="space-y-2">
+            <Label htmlFor="agent-id-input">ElevenLabs agent ID</Label>
+            <Input
+              id="agent-id-input"
+              value={agentIdInput}
+              onChange={(event) => setAgentIdInput(event.target.value)}
+              placeholder="agent_..."
+            />
+            <p className="text-muted-foreground text-xs">
+              Attach this widget instance to a specific ElevenLabs Conversational AI agent.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" onClick={handleSaveSettings}>
+              Save settings
+            </Button>
+            <Button type="button" variant="secondary" onClick={handleLoadSettings}>
+              Load saved
+            </Button>
+            <Button type="button" variant="ghost" onClick={handleClearSavedSettings}>
+              Clear saved
+            </Button>
+          </div>
+        </div>
+        {saveStatus ? <p className="text-muted-foreground text-xs">{saveStatus}</p> : null}
+
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="variant">Variant</Label>
@@ -796,34 +1013,40 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       </Card>
 
       <Card className="p-4">
-        <ConvAIWidgetEmbed
-          agentId={agentId}
-          variant={variant}
-          dismissible={dismissible}
-          actionText={actionText}
-          expandText={expandText}
-          avatarImageUrl={avatarImageUrl || undefined}
-          avatarOrbColor1={useOrbColors ? avatarOrbColor1 : undefined}
-          avatarOrbColor2={useOrbColors ? avatarOrbColor2 : undefined}
-          themeColors={widgetThemeColors}
-          secondaryLogoUrl={secondaryLogoUrl || undefined}
-          secondaryLogoSize={secondaryLogoSize}
-          secondaryLogoOffsetX={secondaryLogoOffsetX}
-          secondaryLogoOffsetY={secondaryLogoOffsetY}
-          secondaryLogoRounded={secondaryLogoRounded}
-          secondaryLogoShadow={secondaryLogoShadow}
-          providerText="Provided by WingSpanAi.com.au"
-          providerUrl="https://wingspanai.com.au"
-          providerIconUrl="/wingspan-favicon.ico"
-          providerIconSize={12}
-          providerOffsetY={8}
-          poweredByTextOverride="Powered by GRABiT-Labs"
-          orbDebug={orbDebug}
-          inputBoxShrinkPx={6}
-          inputTextLiftPx={6}
-          dynamicVariables={dynamicVariablesResult.value}
-          onCallEvent={handleCallEvent}
-        />
+        {resolvedAgentId ? (
+          <ConvAIWidgetEmbed
+            agentId={resolvedAgentId}
+            variant={variant}
+            dismissible={dismissible}
+            actionText={actionText}
+            expandText={expandText}
+            avatarImageUrl={avatarImageUrl || undefined}
+            avatarOrbColor1={useOrbColors ? avatarOrbColor1 : undefined}
+            avatarOrbColor2={useOrbColors ? avatarOrbColor2 : undefined}
+            themeColors={widgetThemeColors}
+            secondaryLogoUrl={secondaryLogoUrl || undefined}
+            secondaryLogoSize={secondaryLogoSize}
+            secondaryLogoOffsetX={secondaryLogoOffsetX}
+            secondaryLogoOffsetY={secondaryLogoOffsetY}
+            secondaryLogoRounded={secondaryLogoRounded}
+            secondaryLogoShadow={secondaryLogoShadow}
+            providerText="Provided by WingSpanAi.com.au"
+            providerUrl="https://wingspanai.com.au"
+            providerIconUrl="/wingspan-favicon.ico"
+            providerIconSize={12}
+            providerOffsetY={8}
+            poweredByTextOverride="Powered by GRABiT-Labs"
+            orbDebug={orbDebug}
+            inputBoxShrinkPx={6}
+            inputTextLiftPx={6}
+            dynamicVariables={dynamicVariablesResult.value}
+            onCallEvent={handleCallEvent}
+          />
+        ) : (
+          <p className="text-muted-foreground text-sm">
+            Enter an <code>agentId</code> above to load the widget.
+          </p>
+        )}
       </Card>
 
       <Card className="space-y-2 p-4">

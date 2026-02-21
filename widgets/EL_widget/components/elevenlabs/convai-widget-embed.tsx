@@ -839,21 +839,16 @@ export function ConvAIWidgetEmbed({
         return;
       }
 
-      // Fallback: anchor to host element to keep logo visible if panel detection fails.
+      // If expanded panel is not detected, treat widget as collapsed and hide provider text.
+      providerOverlay.style.display = 'none';
+
+      // Fallback: anchor logo to host element to keep it visible if panel detection fails.
       const hostRect = widgetElement.getBoundingClientRect();
       if (hostRect.width > 0 && hostRect.height > 0) {
         if (secondaryLogoUrl) {
           logoOverlay.style.left = `${Math.round(hostRect.left + secondaryLogoOffsetX)}px`;
           logoOverlay.style.top = `${Math.round(hostRect.top + secondaryLogoOffsetY)}px`;
           logoOverlay.style.display = 'block';
-        }
-        if (providerText) {
-          placeProviderOverlayWithinPanel({
-            overlay: providerOverlay,
-            panelRect: hostRect,
-            desiredCenterX: hostRect.left + hostRect.width / 2,
-            desiredTop: hostRect.bottom - 20 - providerOffsetY,
-          });
         }
       } else {
         logoOverlay.style.display = 'none';
