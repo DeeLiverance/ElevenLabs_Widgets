@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Test Brand Sunset Avatar">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FDBA74"/>
+      <stop offset="55%" stop-color="#F97316"/>
+      <stop offset="100%" stop-color="#C2410C"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="128" fill="url(#g)"/>
+  <circle cx="96" cy="96" r="44" fill="#FFF7ED" opacity="0.55"/>
+  <path d="M74 150C74 126 92 112 120 112C146 112 162 126 162 148C162 170 146 184 120 184C94 184 74 170 74 150ZM98 92C98 78 108 68 122 68C136 68 146 78 146 92C146 106 136 116 122 116C108 116 98 106 98 92Z" fill="#7C2D12"/>
+</svg>

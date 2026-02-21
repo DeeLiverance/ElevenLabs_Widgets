@@ -103,10 +103,37 @@ type EventLogItem = {
 };
 
 const PLAYGROUND_SETTINGS_STORAGE_KEY = 'convai-replica-playground-settings-v1';
+const BRAND_PROFILES_STORAGE_KEY = 'convai-replica-brand-profiles-v1';
 
 type ConvAIReplicaSettings = ConvAIReplicaPresetSettings & {
   repoPresetId?: string;
 };
+
+type SavedBrandProfile = {
+  id: string;
+  label: string;
+  description: string;
+  settings: Partial<ConvAIReplicaPresetSettings>;
+};
+
+function sanitizePresetId(rawId: string): string {
+  const normalized = rawId
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return normalized || 'new-client';
+}
+
+function escapeSingleQuoted(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function toProfileSettings(snapshot: ConvAIReplicaSettings): ConvAIReplicaPresetSettings {
+  const { repoPresetId: _unusedRepoPresetId, ...settings } = snapshot;
+  return settings;
+}
 
 function parseDynamicVariables(rawInput: string): { value?: Record<string, string>; error?: string } {
   if (!rawInput.trim()) {
@@ -177,6 +204,13 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
   const [selectedRepoPresetId, setSelectedRepoPresetId] = React.useState(
     convaiReplicaPresets[0]?.id ?? ''
   );
+  const [newPresetIdInput, setNewPresetIdInput] = React.useState('wingspanai');
+  const [newPresetLabelInput, setNewPresetLabelInput] = React.useState('WingSpanAi');
+  const [newPresetDescriptionInput, setNewPresetDescriptionInput] = React.useState(
+    'WingSpanAi client preset.'
+  );
+  const [savedBrandProfiles, setSavedBrandProfiles] = React.useState<SavedBrandProfile[]>([]);
+  const [selectedSavedBrandId, setSelectedSavedBrandId] = React.useState('');
   const eventLogIdRef = React.useRef(0);
   const saveStatusTimeoutRef = React.useRef<number | null>(null);
 
@@ -219,6 +253,10 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
   const selectedRepoPreset = React.useMemo(
     () => convaiReplicaPresets.find((preset) => preset.id === selectedRepoPresetId),
     [selectedRepoPresetId]
+  );
+  const selectedSavedBrandProfile = React.useMemo(
+    () => savedBrandProfiles.find((profile) => profile.id === selectedSavedBrandId),
+    [savedBrandProfiles, selectedSavedBrandId]
   );
 
   const widgetThemeColors = React.useMemo<ConvAIWidgetThemeColors | undefined>(() => {
@@ -409,6 +447,121 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
     }
   }, [settingsSnapshot, setTemporaryStatus]);
 
+  const handleCopyPresetTemplate = React.useCallback(async () => {
+    if (typeof window === 'undefined') return;
+
+    const presetId = sanitizePresetId(newPresetIdInput);
+    const presetLabel = newPresetLabelInput.trim() || 'New Client';
+    const presetDescription = newPresetDescriptionInput.trim() || `${presetLabel} preset.`;
+    const presetSettings = toProfileSettings(settingsSnapshot);
+
+    const presetBlock = [
+      '{',
+      `  id: '${escapeSingleQuoted(presetId)}',`,
+      `  label: '${escapeSingleQuoted(presetLabel)}',`,
+      `  description: '${escapeSingleQuoted(presetDescription)}',`,
+      `  settings: ${JSON.stringify(presetSettings, null, 2)},`,
+      '},',
+    ].join('\n');
+
+    try {
+      await window.navigator.clipboard.writeText(presetBlock);
+      setNewPresetIdInput(presetId);
+      setTemporaryStatus(
+        `Preset block copied for ${presetLabel}. Paste into lib/convai-replica-presets.ts.`
+      );
+    } catch {
+      setTemporaryStatus('Could not copy preset block.');
+    }
+  }, [
+    newPresetDescriptionInput,
+    newPresetIdInput,
+    newPresetLabelInput,
+    settingsSnapshot,
+    setTemporaryStatus,
+  ]);
+
+  const handleSaveBrandProfile = React.useCallback(() => {
+    if (typeof window === 'undefined') return;
+
+    const id = sanitizePresetId(newPresetIdInput);
+    const label = newPresetLabelInput.trim() || 'New Client';
+    const description = newPresetDescriptionInput.trim() || `${label} preset.`;
+    const profile: SavedBrandProfile = {
+      id,
+      label,
+      description,
+      settings: toProfileSettings(settingsSnapshot),
+    };
+
+    const existingIndex = savedBrandProfiles.findIndex((current) => current.id === id);
+    const nextProfiles = [...savedBrandProfiles];
+    if (existingIndex >= 0) {
+      nextProfiles[existingIndex] = profile;
+    } else {
+      nextProfiles.unshift(profile);
+    }
+
+    try {
+      window.localStorage.setItem(BRAND_PROFILES_STORAGE_KEY, JSON.stringify(nextProfiles));
+      setSavedBrandProfiles(nextProfiles);
+      setSelectedSavedBrandId(id);
+      setNewPresetIdInput(id);
+      setTemporaryStatus(`Brand profile saved: ${label} (logos included).`);
+    } catch {
+      setTemporaryStatus(
+        'Could not save brand profile. The logo image payload may be too large for local storage.'
+      );
+    }
+  }, [
+    newPresetDescriptionInput,
+    newPresetIdInput,
+    newPresetLabelInput,
+    savedBrandProfiles,
+    settingsSnapshot,
+    setTemporaryStatus,
+  ]);
+
+  const handleLoadBrandProfile = React.useCallback(() => {
+    if (!selectedSavedBrandProfile) {
+      setTemporaryStatus('Pick a saved brand profile first.');
+      return;
+    }
+
+    applySavedSettings(selectedSavedBrandProfile.settings);
+    setNewPresetIdInput(selectedSavedBrandProfile.id);
+    setNewPresetLabelInput(selectedSavedBrandProfile.label);
+    setNewPresetDescriptionInput(selectedSavedBrandProfile.description);
+    setTemporaryStatus(`Brand profile loaded: ${selectedSavedBrandProfile.label}.`);
+  }, [applySavedSettings, selectedSavedBrandProfile, setTemporaryStatus]);
+
+  const handleDeleteBrandProfile = React.useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (!selectedSavedBrandId) {
+      setTemporaryStatus('Pick a saved brand profile first.');
+      return;
+    }
+
+    const removedProfile = savedBrandProfiles.find((profile) => profile.id === selectedSavedBrandId);
+    const nextProfiles = savedBrandProfiles.filter((profile) => profile.id !== selectedSavedBrandId);
+    try {
+      if (nextProfiles.length === 0) {
+        window.localStorage.removeItem(BRAND_PROFILES_STORAGE_KEY);
+      } else {
+        window.localStorage.setItem(BRAND_PROFILES_STORAGE_KEY, JSON.stringify(nextProfiles));
+      }
+      setSavedBrandProfiles(nextProfiles);
+      setSelectedSavedBrandId(nextProfiles[0]?.id ?? '');
+      setTemporaryStatus(
+        removedProfile
+          ? `Brand profile removed: ${removedProfile.label}.`
+          : 'Brand profile removed.'
+      );
+    } catch {
+      setTemporaryStatus('Could not delete brand profile.');
+    }
+  }, [savedBrandProfiles, selectedSavedBrandId, setTemporaryStatus]);
+
   const handleSaveSettings = React.useCallback(() => {
     if (typeof window === 'undefined') return;
     try {
@@ -461,6 +614,66 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       setHasHydratedSavedSettings(true);
     }
   }, [applySavedSettings]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const raw = window.localStorage.getItem(BRAND_PROFILES_STORAGE_KEY);
+    if (!raw) {
+      const seededTestProfiles: SavedBrandProfile[] = convaiReplicaPresets
+        .filter((preset) => preset.id.startsWith('test-brand-'))
+        .map((preset) => ({
+          id: preset.id,
+          label: preset.label,
+          description: preset.description,
+          settings: preset.settings,
+        }));
+
+      if (seededTestProfiles.length === 0) return;
+
+      setSavedBrandProfiles(seededTestProfiles);
+      setSelectedSavedBrandId(seededTestProfiles[0].id);
+      try {
+        window.localStorage.setItem(BRAND_PROFILES_STORAGE_KEY, JSON.stringify(seededTestProfiles));
+      } catch {
+        // Ignore write failures and keep in-memory seeded profiles for this session.
+      }
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) return;
+
+      const hydratedProfiles: SavedBrandProfile[] = parsed.flatMap((entry) => {
+        if (!entry || typeof entry !== 'object') return [];
+        const profile = entry as Partial<SavedBrandProfile>;
+        if (!profile.settings || typeof profile.settings !== 'object') return [];
+
+        const id = sanitizePresetId(typeof profile.id === 'string' ? profile.id : '');
+        const label =
+          typeof profile.label === 'string' && profile.label.trim() ? profile.label.trim() : id;
+        const description =
+          typeof profile.description === 'string' && profile.description.trim()
+            ? profile.description.trim()
+            : `${label} preset.`;
+
+        return [
+          {
+            id,
+            label,
+            description,
+            settings: profile.settings as Partial<ConvAIReplicaPresetSettings>,
+          },
+        ];
+      });
+
+      if (hydratedProfiles.length === 0) return;
+      setSavedBrandProfiles(hydratedProfiles);
+      setSelectedSavedBrandId(hydratedProfiles[0].id);
+    } catch {
+      // Ignore malformed brand profiles and continue with empty list.
+    }
+  }, []);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -594,6 +807,74 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
             </Button>
             <Button type="button" variant="secondary" onClick={() => void handleCopySettingsJson()}>
               Copy settings JSON
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
+          <div className="space-y-2">
+            <Label htmlFor="new-preset-id">New preset ID</Label>
+            <Input
+              id="new-preset-id"
+              value={newPresetIdInput}
+              onChange={(event) => setNewPresetIdInput(event.target.value)}
+              placeholder="wingspanai"
+            />
+            <p className="text-muted-foreground text-xs">
+              Saved ID: <code>{sanitizePresetId(newPresetIdInput)}</code>
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-preset-label">New preset label</Label>
+            <Input
+              id="new-preset-label"
+              value={newPresetLabelInput}
+              onChange={(event) => setNewPresetLabelInput(event.target.value)}
+              placeholder="WingSpanAi"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-preset-description">New preset description</Label>
+            <Input
+              id="new-preset-description"
+              value={newPresetDescriptionInput}
+              onChange={(event) => setNewPresetDescriptionInput(event.target.value)}
+              placeholder="WingSpanAi client preset."
+            />
+          </div>
+          <Button type="button" variant="secondary" onClick={() => void handleCopyPresetTemplate()}>
+            Copy preset block
+          </Button>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+          <div className="space-y-2">
+            <Label htmlFor="saved-brand-profiles">Saved brand profiles (logos included)</Label>
+            <Select value={selectedSavedBrandId} onValueChange={setSelectedSavedBrandId}>
+              <SelectTrigger id="saved-brand-profiles" className="w-full">
+                <SelectValue placeholder="No saved brand profiles yet" />
+              </SelectTrigger>
+              <SelectContent>
+                {savedBrandProfiles.map((profile) => (
+                  <SelectItem key={profile.id} value={profile.id}>
+                    {profile.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-xs">
+              Save the current widget setup as a named brand profile and reload it later.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="secondary" onClick={handleSaveBrandProfile}>
+              Save brand profile
+            </Button>
+            <Button type="button" variant="secondary" onClick={handleLoadBrandProfile}>
+              Load brand profile
+            </Button>
+            <Button type="button" variant="ghost" onClick={handleDeleteBrandProfile}>
+              Delete brand profile
             </Button>
           </div>
         </div>
