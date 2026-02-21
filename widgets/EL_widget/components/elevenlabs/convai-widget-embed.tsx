@@ -21,6 +21,7 @@ type WidgetPlacement =
   | 'bottom-left'
   | 'bottom'
   | 'bottom-right';
+type WidgetConversationMode = 'voice-and-text' | 'voice-only' | 'chat-mode';
 type ExpandAction = 'expand' | 'collapse' | 'toggle';
 
 type ThemeColorKey =
@@ -66,6 +67,7 @@ export interface ConvAIWidgetEmbedProps {
   agentId: string;
   variant?: WidgetVariant;
   placement?: WidgetPlacement;
+  conversationMode?: WidgetConversationMode;
   dismissible?: boolean;
   serverLocation?: string;
   actionText?: string;
@@ -523,6 +525,7 @@ export function ConvAIWidgetEmbed({
   agentId,
   variant = 'compact',
   placement,
+  conversationMode,
   dismissible = true,
   serverLocation,
   actionText,
@@ -622,6 +625,41 @@ export function ConvAIWidgetEmbed({
     setOptionalAttribute(widgetElement, 'override-first-message', overrideFirstMessage);
     setOptionalAttribute(widgetElement, 'override-voice-id', overrideVoiceId);
 
+    const syncConversationModeAttributes = () => {
+      let textInputAttr: 'true' | 'false' | null = null;
+      let overrideTextOnlyAttr: 'true' | 'false' | null = null;
+
+      if (conversationMode === 'voice-only') {
+        textInputAttr = 'false';
+        overrideTextOnlyAttr = 'false';
+      } else if (conversationMode === 'voice-and-text') {
+        textInputAttr = 'true';
+        overrideTextOnlyAttr = 'false';
+      } else if (conversationMode === 'chat-mode') {
+        textInputAttr = 'true';
+        overrideTextOnlyAttr = 'true';
+      }
+
+      const currentTextInput = widgetElement.getAttribute('text-input');
+      if (textInputAttr === null) {
+        if (currentTextInput !== null) {
+          widgetElement.removeAttribute('text-input');
+        }
+      } else if (currentTextInput !== textInputAttr) {
+        widgetElement.setAttribute('text-input', textInputAttr);
+      }
+
+      const currentOverrideTextOnly = widgetElement.getAttribute('override-text-only');
+      if (overrideTextOnlyAttr === null) {
+        if (currentOverrideTextOnly !== null) {
+          widgetElement.removeAttribute('override-text-only');
+        }
+      } else if (currentOverrideTextOnly !== overrideTextOnlyAttr) {
+        widgetElement.setAttribute('override-text-only', overrideTextOnlyAttr);
+      }
+    };
+    syncConversationModeAttributes();
+
     if (themeColors) {
       for (const [key, cssVariableName] of Object.entries(themeColorCssVariableMap) as [
         ThemeColorKey,
@@ -662,8 +700,12 @@ export function ConvAIWidgetEmbed({
         widgetElement.setAttribute('placement', selectedPlacement);
       }
     };
+    const enforceConversationMode = () => {
+      syncConversationModeAttributes();
+    };
     enforceSelectedVariant();
     enforceSelectedPlacement();
+    enforceConversationMode();
 
     const logoOverlay = document.createElement('img');
     logoOverlay.alt = secondaryLogoAlt;
@@ -751,6 +793,7 @@ export function ConvAIWidgetEmbed({
     const updateSecondaryLogoPosition = () => {
       enforceSelectedVariant();
       enforceSelectedPlacement();
+      enforceConversationMode();
 
       const shadowRoot = widgetElement.shadowRoot;
       if (!secondaryLogoUrl || !shadowRoot) {
@@ -984,6 +1027,7 @@ export function ConvAIWidgetEmbed({
     themeColors,
     variant,
     placement,
+    conversationMode,
   ]);
 
   if (scriptError) {

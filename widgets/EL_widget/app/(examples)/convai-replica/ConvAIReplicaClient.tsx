@@ -32,6 +32,12 @@ const placementOptions = [
   'bottom-right',
 ] as const;
 type PlacementOption = (typeof placementOptions)[number];
+const conversationModeOptions = [
+  { id: 'voice-and-text', label: 'Voice + text', description: 'Mic and text input are both available.' },
+  { id: 'voice-only', label: 'Voice only', description: 'Hide text input and keep voice interaction only.' },
+  { id: 'chat-mode', label: 'Chat mode', description: 'Force text-only mode for traditional chat behavior.' },
+] as const;
+type ConversationModeOption = (typeof conversationModeOptions)[number]['id'];
 
 const colorPresets = [
   { id: 'violet', label: 'Violet', color1: '#6D28D9', color2: '#A855F7' },
@@ -98,6 +104,7 @@ type ConvAIReplicaSettings = {
   agentId: string;
   variant: VariantOption;
   placement: PlacementOption;
+  conversationMode: ConversationModeOption;
   dismissible: boolean;
   actionText: string;
   expandText: string;
@@ -149,6 +156,8 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
   const [agentIdInput, setAgentIdInput] = React.useState(agentId ?? '');
   const [variant, setVariant] = React.useState<VariantOption>('compact');
   const [placement, setPlacement] = React.useState<PlacementOption>('bottom-right');
+  const [conversationMode, setConversationMode] =
+    React.useState<ConversationModeOption>('voice-and-text');
   const [dismissible, setDismissible] = React.useState(true);
   const [actionText, setActionText] = React.useState('Talk to us');
   const [expandText, setExpandText] = React.useState('Need help?');
@@ -249,6 +258,10 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
   ]);
 
   const resolvedAgentId = agentIdInput.trim();
+  const activeConversationMode = React.useMemo(
+    () => conversationModeOptions.find((option) => option.id === conversationMode),
+    [conversationMode]
+  );
 
   const applySavedSettings = React.useCallback(
     (saved: Partial<ConvAIReplicaSettings>) => {
@@ -258,6 +271,12 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       }
       if (saved.placement && placementOptions.includes(saved.placement as PlacementOption)) {
         setPlacement(saved.placement as PlacementOption);
+      }
+      if (
+        saved.conversationMode &&
+        conversationModeOptions.some((option) => option.id === saved.conversationMode)
+      ) {
+        setConversationMode(saved.conversationMode as ConversationModeOption);
       }
       if (typeof saved.dismissible === 'boolean') setDismissible(saved.dismissible);
       if (typeof saved.actionText === 'string') setActionText(saved.actionText);
@@ -304,6 +323,7 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       agentId: resolvedAgentId,
       variant,
       placement,
+      conversationMode,
       dismissible,
       actionText,
       expandText,
@@ -331,6 +351,7 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       resolvedAgentId,
       variant,
       placement,
+      conversationMode,
       dismissible,
       actionText,
       expandText,
@@ -587,6 +608,28 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2 md:col-span-2">
+            <Label>Conversation mode</Label>
+            <div className="flex flex-wrap gap-2">
+              {conversationModeOptions.map((option) => {
+                const isActive = conversationMode === option.id;
+                return (
+                  <Button
+                    key={option.id}
+                    type="button"
+                    variant={isActive ? 'default' : 'secondary'}
+                    onClick={() => setConversationMode(option.id)}
+                  >
+                    {option.label}
+                  </Button>
+                );
+              })}
+            </div>
+            <p className="text-muted-foreground text-xs">
+              {activeConversationMode?.description}
+            </p>
           </div>
 
           <div className="flex items-end justify-between rounded-md border p-3">
@@ -1073,6 +1116,7 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
             agentId={resolvedAgentId}
             variant={variant}
             placement={placement}
+            conversationMode={conversationMode}
             dismissible={dismissible}
             actionText={actionText}
             expandText={expandText}
