@@ -1,0 +1,43 @@
+export type ConvAIReplicaPresetSettings = {
+  agentId: string;
+  variant: 'tiny' | 'compact' | 'expanded' | 'full';
+  placement: 'top-left' | 'top' | 'top-right' | 'bottom-left' | 'bottom' | 'bottom-right';
+  conversationMode: 'voice-and-text' | 'voice-only' | 'chat-mode';
+  dismissible: boolean;
+  actionText: string;
+  expandText: string;
+  orbDebug: boolean;
+  avatarImageUrl: string;
+  secondaryLogoUrl: string;
+  secondaryLogoSize: number;
+  secondaryLogoOffsetX: number;
+  secondaryLogoOffsetY: number;
+  secondaryLogoRounded: boolean;
+  secondaryLogoShadow: boolean;
+  providerText: string;
+  providerUrl: string;
+  providerIconUrl: string;
+  providerIconSize: number;
+  providerOffsetY: number;
+  poweredByTextOverride: string;
+  useOrbColors: boolean;
+  avatarOrbColor1: string;
+  avatarOrbColor2: string;
+  useWidgetThemeColors: boolean;
+  widgetBaseColor: string;
+  widgetBasePrimaryColor: string;
+  widgetBaseBorderColor: string;
+  widgetBaseSubtleColor: string;
+  widgetAccentColor: string;
+  widgetAccentPrimaryColor: string;
+  inputBoxShrinkPx: number;
+  inputTextLiftPx: number;
+  dynamicVariablesInput: string;
+};
+
+export type ConvAIReplicaPreset = {
+  id: string;
+  label: string;
+  description: string;
+  settings: Partial<ConvAIReplicaPresetSettings>;
+};

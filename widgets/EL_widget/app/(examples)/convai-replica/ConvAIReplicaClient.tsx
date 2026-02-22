@@ -103,7 +103,8 @@ type EventLogItem = {
 };
 
 const PLAYGROUND_SETTINGS_STORAGE_KEY = 'convai-replica-playground-settings-v1';
-const BRAND_PROFILES_STORAGE_KEY = 'convai-replica-brand-profiles-v1';
+const REPO_BRAND_PROFILES_API_PATH = '/api/brand-profiles';
+const REPO_BRAND_PROFILES_EXPORT_TS_API_PATH = '/api/brand-profiles/export-ts';
 
 type ConvAIReplicaSettings = ConvAIReplicaPresetSettings & {
   repoPresetId?: string;
@@ -176,6 +177,12 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
   const [secondaryLogoOffsetY, setSecondaryLogoOffsetY] = React.useState(51);
   const [secondaryLogoRounded, setSecondaryLogoRounded] = React.useState(true);
   const [secondaryLogoShadow, setSecondaryLogoShadow] = React.useState(true);
+  const [providerText, setProviderText] = React.useState('Provided by WingSpanAi.com.au');
+  const [providerUrl, setProviderUrl] = React.useState('https://wingspanai.com.au');
+  const [providerIconUrl, setProviderIconUrl] = React.useState('/wingspan-favicon.ico');
+  const [providerIconSize, setProviderIconSize] = React.useState(12);
+  const [providerOffsetY, setProviderOffsetY] = React.useState(6);
+  const [poweredByTextOverride, setPoweredByTextOverride] = React.useState('Powered by GRABiT-Labs');
   const [useOrbColors, setUseOrbColors] = React.useState(true);
   const [avatarOrbColor1, setAvatarOrbColor1] = React.useState<string>(colorPresets[0].color1);
   const [avatarOrbColor2, setAvatarOrbColor2] = React.useState<string>(colorPresets[0].color2);
@@ -194,6 +201,8 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
   const [widgetAccentPrimaryColor, setWidgetAccentPrimaryColor] = React.useState<string>(
     widgetThemePresets[0].accentPrimary
   );
+  const [inputBoxShrinkPx, setInputBoxShrinkPx] = React.useState(6);
+  const [inputTextLiftPx, setInputTextLiftPx] = React.useState(6);
   const [avatarLoadError, setAvatarLoadError] = React.useState<string | null>(null);
   const [dynamicVariablesInput, setDynamicVariablesInput] = React.useState(
     '{\n  "source": "convai-replica",\n  "build": "baseline"\n}'
@@ -211,6 +220,7 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
   );
   const [savedBrandProfiles, setSavedBrandProfiles] = React.useState<SavedBrandProfile[]>([]);
   const [selectedSavedBrandId, setSelectedSavedBrandId] = React.useState('');
+  const [isRepoProfilesLoading, setIsRepoProfilesLoading] = React.useState(false);
   const eventLogIdRef = React.useRef(0);
   const saveStatusTimeoutRef = React.useRef<number | null>(null);
 
@@ -326,6 +336,18 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       }
       if (typeof saved.secondaryLogoRounded === 'boolean') setSecondaryLogoRounded(saved.secondaryLogoRounded);
       if (typeof saved.secondaryLogoShadow === 'boolean') setSecondaryLogoShadow(saved.secondaryLogoShadow);
+      if (typeof saved.providerText === 'string') setProviderText(saved.providerText);
+      if (typeof saved.providerUrl === 'string') setProviderUrl(saved.providerUrl);
+      if (typeof saved.providerIconUrl === 'string') setProviderIconUrl(saved.providerIconUrl);
+      if (typeof saved.providerIconSize === 'number') {
+        setProviderIconSize(Math.min(64, Math.max(0, Math.round(saved.providerIconSize))));
+      }
+      if (typeof saved.providerOffsetY === 'number') {
+        setProviderOffsetY(Math.min(80, Math.max(-40, Math.round(saved.providerOffsetY))));
+      }
+      if (typeof saved.poweredByTextOverride === 'string') {
+        setPoweredByTextOverride(saved.poweredByTextOverride);
+      }
       if (typeof saved.useOrbColors === 'boolean') setUseOrbColors(saved.useOrbColors);
       if (typeof saved.avatarOrbColor1 === 'string') setAvatarOrbColor1(saved.avatarOrbColor1);
       if (typeof saved.avatarOrbColor2 === 'string') setAvatarOrbColor2(saved.avatarOrbColor2);
@@ -339,6 +361,12 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       if (typeof saved.widgetAccentColor === 'string') setWidgetAccentColor(saved.widgetAccentColor);
       if (typeof saved.widgetAccentPrimaryColor === 'string') {
         setWidgetAccentPrimaryColor(saved.widgetAccentPrimaryColor);
+      }
+      if (typeof saved.inputBoxShrinkPx === 'number') {
+        setInputBoxShrinkPx(Math.min(40, Math.max(0, Math.round(saved.inputBoxShrinkPx))));
+      }
+      if (typeof saved.inputTextLiftPx === 'number') {
+        setInputTextLiftPx(Math.min(40, Math.max(0, Math.round(saved.inputTextLiftPx))));
       }
       if (typeof saved.dynamicVariablesInput === 'string') {
         setDynamicVariablesInput(saved.dynamicVariablesInput);
@@ -367,6 +395,12 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       secondaryLogoOffsetY,
       secondaryLogoRounded,
       secondaryLogoShadow,
+      providerText,
+      providerUrl,
+      providerIconUrl,
+      providerIconSize,
+      providerOffsetY,
+      poweredByTextOverride,
       useOrbColors,
       avatarOrbColor1,
       avatarOrbColor2,
@@ -377,6 +411,8 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       widgetBaseSubtleColor,
       widgetAccentColor,
       widgetAccentPrimaryColor,
+      inputBoxShrinkPx,
+      inputTextLiftPx,
       dynamicVariablesInput,
     }),
     [
@@ -396,6 +432,12 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       secondaryLogoOffsetY,
       secondaryLogoRounded,
       secondaryLogoShadow,
+      providerText,
+      providerUrl,
+      providerIconUrl,
+      providerIconSize,
+      providerOffsetY,
+      poweredByTextOverride,
       useOrbColors,
       avatarOrbColor1,
       avatarOrbColor2,
@@ -406,6 +448,8 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       widgetBaseSubtleColor,
       widgetAccentColor,
       widgetAccentPrimaryColor,
+      inputBoxShrinkPx,
+      inputTextLiftPx,
       dynamicVariablesInput,
     ]
   );
@@ -441,7 +485,7 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
     if (typeof window === 'undefined') return;
     try {
       await window.navigator.clipboard.writeText(JSON.stringify(settingsSnapshot, null, 2));
-      setTemporaryStatus('Settings JSON copied. Add it to lib/convai-replica-presets.ts.');
+      setTemporaryStatus('Settings JSON copied. Add it to a file in brand-profiles/.');
     } catch {
       setTemporaryStatus('Could not copy settings JSON.');
     }
@@ -468,7 +512,7 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       await window.navigator.clipboard.writeText(presetBlock);
       setNewPresetIdInput(presetId);
       setTemporaryStatus(
-        `Preset block copied for ${presetLabel}. Paste into lib/convai-replica-presets.ts.`
+        `Preset block copied for ${presetLabel}. Paste into a file in brand-profiles/.`
       );
     } catch {
       setTemporaryStatus('Could not copy preset block.');
@@ -481,9 +525,74 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
     setTemporaryStatus,
   ]);
 
-  const handleSaveBrandProfile = React.useCallback(() => {
-    if (typeof window === 'undefined') return;
+  const refreshRepoBrandProfiles = React.useCallback(
+    async (options?: { preferredId?: string; seedIfEmpty?: boolean; silent?: boolean }) => {
+      setIsRepoProfilesLoading(true);
+      try {
+        const response = await fetch(REPO_BRAND_PROFILES_API_PATH, {
+          method: 'GET',
+          cache: 'no-store',
+        });
+        if (!response.ok) {
+          throw new Error('Could not load repo brand profiles.');
+        }
 
+        const payload = (await response.json()) as { profiles?: SavedBrandProfile[] };
+        let profiles = Array.isArray(payload.profiles) ? payload.profiles : [];
+
+        if (profiles.length === 0 && options?.seedIfEmpty) {
+          const seedProfiles = convaiReplicaPresets
+            .filter((preset) => preset.id.startsWith('test-brand-'))
+            .map((preset) => ({
+              id: preset.id,
+              label: preset.label,
+              description: preset.description,
+              settings: preset.settings,
+            }));
+
+          for (const profile of seedProfiles) {
+            await fetch(REPO_BRAND_PROFILES_API_PATH, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(profile),
+            });
+          }
+
+          const seededResponse = await fetch(REPO_BRAND_PROFILES_API_PATH, {
+            method: 'GET',
+            cache: 'no-store',
+          });
+          if (seededResponse.ok) {
+            const seededPayload = (await seededResponse.json()) as { profiles?: SavedBrandProfile[] };
+            profiles = Array.isArray(seededPayload.profiles) ? seededPayload.profiles : profiles;
+          }
+        }
+
+        setSavedBrandProfiles(profiles);
+        setSelectedSavedBrandId((current) => {
+          if (options?.preferredId && profiles.some((profile) => profile.id === options.preferredId)) {
+            return options.preferredId;
+          }
+          if (current && profiles.some((profile) => profile.id === current)) {
+            return current;
+          }
+          return profiles[0]?.id ?? '';
+        });
+
+        return profiles;
+      } catch {
+        if (!options?.silent) {
+          setTemporaryStatus('Could not load repo brand profiles.');
+        }
+        return [];
+      } finally {
+        setIsRepoProfilesLoading(false);
+      }
+    },
+    [setTemporaryStatus]
+  );
+
+  const handleSaveBrandProfile = React.useCallback(async () => {
     const id = sanitizePresetId(newPresetIdInput);
     const label = newPresetLabelInput.trim() || 'New Client';
     const description = newPresetDescriptionInput.trim() || `${label} preset.`;
@@ -494,30 +603,62 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       settings: toProfileSettings(settingsSnapshot),
     };
 
-    const existingIndex = savedBrandProfiles.findIndex((current) => current.id === id);
-    const nextProfiles = [...savedBrandProfiles];
-    if (existingIndex >= 0) {
-      nextProfiles[existingIndex] = profile;
-    } else {
-      nextProfiles.unshift(profile);
-    }
-
     try {
-      window.localStorage.setItem(BRAND_PROFILES_STORAGE_KEY, JSON.stringify(nextProfiles));
-      setSavedBrandProfiles(nextProfiles);
-      setSelectedSavedBrandId(id);
+      const response = await fetch(REPO_BRAND_PROFILES_API_PATH, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+      });
+      if (!response.ok) {
+        throw new Error();
+      }
+
       setNewPresetIdInput(id);
-      setTemporaryStatus(`Brand profile saved: ${label} (logos included).`);
+      await refreshRepoBrandProfiles({ preferredId: id, silent: true });
+      setTemporaryStatus(`Brand profile saved to repo: ${label} (logos included).`);
     } catch {
-      setTemporaryStatus(
-        'Could not save brand profile. The logo image payload may be too large for local storage.'
-      );
+      setTemporaryStatus('Could not save brand profile to repo.');
     }
   }, [
     newPresetDescriptionInput,
     newPresetIdInput,
     newPresetLabelInput,
-    savedBrandProfiles,
+    refreshRepoBrandProfiles,
+    settingsSnapshot,
+    setTemporaryStatus,
+  ]);
+
+  const handleSaveTsPreset = React.useCallback(async () => {
+    const id = sanitizePresetId(newPresetIdInput);
+    const label = newPresetLabelInput.trim() || 'New Client';
+    const description = newPresetDescriptionInput.trim() || `${label} preset.`;
+    const profile: SavedBrandProfile = {
+      id,
+      label,
+      description,
+      settings: toProfileSettings(settingsSnapshot),
+    };
+
+    try {
+      const response = await fetch(REPO_BRAND_PROFILES_EXPORT_TS_API_PATH, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+      });
+
+      if (!response.ok) {
+        throw new Error();
+      }
+
+      setNewPresetIdInput(id);
+      setTemporaryStatus(`TS preset saved: brand-profiles/generated/${id}.ts`);
+    } catch {
+      setTemporaryStatus('Could not save TS preset.');
+    }
+  }, [
+    newPresetDescriptionInput,
+    newPresetIdInput,
+    newPresetLabelInput,
     settingsSnapshot,
     setTemporaryStatus,
   ]);
@@ -535,32 +676,26 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
     setTemporaryStatus(`Brand profile loaded: ${selectedSavedBrandProfile.label}.`);
   }, [applySavedSettings, selectedSavedBrandProfile, setTemporaryStatus]);
 
-  const handleDeleteBrandProfile = React.useCallback(() => {
-    if (typeof window === 'undefined') return;
+  const handleDeleteBrandProfile = React.useCallback(async () => {
     if (!selectedSavedBrandId) {
       setTemporaryStatus('Pick a saved brand profile first.');
       return;
     }
-
-    const removedProfile = savedBrandProfiles.find((profile) => profile.id === selectedSavedBrandId);
-    const nextProfiles = savedBrandProfiles.filter((profile) => profile.id !== selectedSavedBrandId);
     try {
-      if (nextProfiles.length === 0) {
-        window.localStorage.removeItem(BRAND_PROFILES_STORAGE_KEY);
-      } else {
-        window.localStorage.setItem(BRAND_PROFILES_STORAGE_KEY, JSON.stringify(nextProfiles));
-      }
-      setSavedBrandProfiles(nextProfiles);
-      setSelectedSavedBrandId(nextProfiles[0]?.id ?? '');
-      setTemporaryStatus(
-        removedProfile
-          ? `Brand profile removed: ${removedProfile.label}.`
-          : 'Brand profile removed.'
+      const removedProfile = savedBrandProfiles.find((profile) => profile.id === selectedSavedBrandId);
+      const response = await fetch(
+        `${REPO_BRAND_PROFILES_API_PATH}/${encodeURIComponent(selectedSavedBrandId)}`,
+        { method: 'DELETE' }
       );
+      if (!response.ok) {
+        throw new Error();
+      }
+      await refreshRepoBrandProfiles({ silent: true });
+      setTemporaryStatus(removedProfile ? `Brand profile removed: ${removedProfile.label}.` : 'Brand profile removed.');
     } catch {
       setTemporaryStatus('Could not delete brand profile.');
     }
-  }, [savedBrandProfiles, selectedSavedBrandId, setTemporaryStatus]);
+  }, [refreshRepoBrandProfiles, savedBrandProfiles, selectedSavedBrandId, setTemporaryStatus]);
 
   const handleSaveSettings = React.useCallback(() => {
     if (typeof window === 'undefined') return;
@@ -616,64 +751,8 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
   }, [applySavedSettings]);
 
   React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const raw = window.localStorage.getItem(BRAND_PROFILES_STORAGE_KEY);
-    if (!raw) {
-      const seededTestProfiles: SavedBrandProfile[] = convaiReplicaPresets
-        .filter((preset) => preset.id.startsWith('test-brand-'))
-        .map((preset) => ({
-          id: preset.id,
-          label: preset.label,
-          description: preset.description,
-          settings: preset.settings,
-        }));
-
-      if (seededTestProfiles.length === 0) return;
-
-      setSavedBrandProfiles(seededTestProfiles);
-      setSelectedSavedBrandId(seededTestProfiles[0].id);
-      try {
-        window.localStorage.setItem(BRAND_PROFILES_STORAGE_KEY, JSON.stringify(seededTestProfiles));
-      } catch {
-        // Ignore write failures and keep in-memory seeded profiles for this session.
-      }
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      if (!Array.isArray(parsed)) return;
-
-      const hydratedProfiles: SavedBrandProfile[] = parsed.flatMap((entry) => {
-        if (!entry || typeof entry !== 'object') return [];
-        const profile = entry as Partial<SavedBrandProfile>;
-        if (!profile.settings || typeof profile.settings !== 'object') return [];
-
-        const id = sanitizePresetId(typeof profile.id === 'string' ? profile.id : '');
-        const label =
-          typeof profile.label === 'string' && profile.label.trim() ? profile.label.trim() : id;
-        const description =
-          typeof profile.description === 'string' && profile.description.trim()
-            ? profile.description.trim()
-            : `${label} preset.`;
-
-        return [
-          {
-            id,
-            label,
-            description,
-            settings: profile.settings as Partial<ConvAIReplicaPresetSettings>,
-          },
-        ];
-      });
-
-      if (hydratedProfiles.length === 0) return;
-      setSavedBrandProfiles(hydratedProfiles);
-      setSelectedSavedBrandId(hydratedProfiles[0].id);
-    } catch {
-      // Ignore malformed brand profiles and continue with empty list.
-    }
-  }, []);
+    void refreshRepoBrandProfiles({ seedIfEmpty: true, silent: true });
+  }, [refreshRepoBrandProfiles]);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -798,7 +877,7 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
             </Select>
             <p className="text-muted-foreground text-xs">
               {selectedRepoPreset?.description ??
-                'Choose a source-controlled preset from lib/convai-replica-presets.ts.'}
+                'Choose a source-controlled preset from brand-profiles/.'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -849,10 +928,12 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
 
         <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
           <div className="space-y-2">
-            <Label htmlFor="saved-brand-profiles">Saved brand profiles (logos included)</Label>
+            <Label htmlFor="saved-brand-profiles">Repo brand profiles (logos included)</Label>
             <Select value={selectedSavedBrandId} onValueChange={setSelectedSavedBrandId}>
               <SelectTrigger id="saved-brand-profiles" className="w-full">
-                <SelectValue placeholder="No saved brand profiles yet" />
+                <SelectValue
+                  placeholder={isRepoProfilesLoading ? 'Loading repo profiles...' : 'No repo profiles yet'}
+                />
               </SelectTrigger>
               <SelectContent>
                 {savedBrandProfiles.map((profile) => (
@@ -863,18 +944,28 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
               </SelectContent>
             </Select>
             <p className="text-muted-foreground text-xs">
-              Save the current widget setup as a named brand profile and reload it later.
+              Saves to `brand-profiles/repo-json` so profiles are portable across workstations.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="secondary" onClick={handleSaveBrandProfile}>
+            <Button type="button" variant="secondary" onClick={() => void handleSaveBrandProfile()}>
               Save brand profile
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => void handleSaveTsPreset()}>
+              Save TS preset
             </Button>
             <Button type="button" variant="secondary" onClick={handleLoadBrandProfile}>
               Load brand profile
             </Button>
-            <Button type="button" variant="ghost" onClick={handleDeleteBrandProfile}>
+            <Button type="button" variant="ghost" onClick={() => void handleDeleteBrandProfile()}>
               Delete brand profile
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => void refreshRepoBrandProfiles({ silent: true })}
+            >
+              Refresh repo list
             </Button>
           </div>
         </div>
@@ -894,13 +985,13 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
           </div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="secondary" onClick={handleSaveSettings}>
-              Save settings
+              Save draft (browser)
             </Button>
             <Button type="button" variant="secondary" onClick={handleLoadSettings}>
-              Load saved
+              Load draft
             </Button>
             <Button type="button" variant="ghost" onClick={handleClearSavedSettings}>
-              Clear saved
+              Clear draft
             </Button>
           </div>
         </div>
@@ -1188,6 +1279,102 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
             />
           </div>
 
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="provider-text">Provider footer text</Label>
+            <Input
+              id="provider-text"
+              value={providerText}
+              onChange={(event) => setProviderText(event.target.value)}
+              placeholder="Provided by WingSpanAi.com.au"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="provider-url">Provider footer URL</Label>
+            <Input
+              id="provider-url"
+              value={providerUrl}
+              onChange={(event) => setProviderUrl(event.target.value)}
+              placeholder="https://wingspanai.com.au"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="provider-icon-url">Provider icon URL</Label>
+            <Input
+              id="provider-icon-url"
+              value={providerIconUrl}
+              onChange={(event) => setProviderIconUrl(event.target.value)}
+              placeholder="/wingspan-favicon.ico"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="provider-icon-size">Provider icon size</Label>
+            <Input
+              id="provider-icon-size"
+              type="number"
+              min={0}
+              max={64}
+              value={providerIconSize}
+              onChange={(event) =>
+                setProviderIconSize(Math.min(64, Math.max(0, Number(event.target.value) || providerIconSize)))
+              }
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="provider-offset-y">Provider offset Y</Label>
+            <Input
+              id="provider-offset-y"
+              type="number"
+              min={-40}
+              max={80}
+              value={providerOffsetY}
+              onChange={(event) =>
+                setProviderOffsetY(Math.min(80, Math.max(-40, Number(event.target.value) || providerOffsetY)))
+              }
+            />
+          </div>
+
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="powered-by-text-override">Powered-by text override</Label>
+            <Input
+              id="powered-by-text-override"
+              value={poweredByTextOverride}
+              onChange={(event) => setPoweredByTextOverride(event.target.value)}
+              placeholder="Powered by GRABiT-Labs"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="input-box-shrink-px">Input box shrink (px)</Label>
+            <Input
+              id="input-box-shrink-px"
+              type="number"
+              min={0}
+              max={40}
+              value={inputBoxShrinkPx}
+              onChange={(event) =>
+                setInputBoxShrinkPx(Math.min(40, Math.max(0, Number(event.target.value) || inputBoxShrinkPx)))
+              }
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="input-text-lift-px">Input text lift (px)</Label>
+            <Input
+              id="input-text-lift-px"
+              type="number"
+              min={0}
+              max={40}
+              value={inputTextLiftPx}
+              onChange={(event) =>
+                setInputTextLiftPx(Math.min(40, Math.max(0, Number(event.target.value) || inputTextLiftPx)))
+              }
+            />
+          </div>
+
           <div className="flex items-end justify-between rounded-md border p-3 md:col-span-2">
             <div className="space-y-1">
               <Label htmlFor="use-orb-colors">Use orb colors</Label>
@@ -1462,15 +1649,15 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
             secondaryLogoOffsetY={secondaryLogoOffsetY}
             secondaryLogoRounded={secondaryLogoRounded}
             secondaryLogoShadow={secondaryLogoShadow}
-            providerText="Provided by WingSpanAi.com.au"
-            providerUrl="https://wingspanai.com.au"
-            providerIconUrl="/wingspan-favicon.ico"
-            providerIconSize={12}
-            providerOffsetY={6}
-            poweredByTextOverride="Powered by GRABiT-Labs"
+            providerText={providerText || undefined}
+            providerUrl={providerUrl || undefined}
+            providerIconUrl={providerIconUrl || undefined}
+            providerIconSize={providerIconSize}
+            providerOffsetY={providerOffsetY}
+            poweredByTextOverride={poweredByTextOverride || undefined}
             orbDebug={orbDebug}
-            inputBoxShrinkPx={6}
-            inputTextLiftPx={6}
+            inputBoxShrinkPx={inputBoxShrinkPx}
+            inputTextLiftPx={inputTextLiftPx}
             dynamicVariables={dynamicVariablesResult.value}
             onCallEvent={handleCallEvent}
           />

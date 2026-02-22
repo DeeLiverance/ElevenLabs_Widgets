@@ -1,0 +1,45 @@
+import type { ConvAIReplicaPreset } from '../types';
+
+export const WingspanaiGeneratedBrandProfile: ConvAIReplicaPreset = {
+  "id": "wingspanai",
+  "label": "WingSpanAi",
+  "description": "WingSpanAi client preset.",
+  "settings": {
+    "agentId": "agent_4301k7rmfcw6fd1bhmavy0w1qy54",
+    "variant": "full",
+    "placement": "bottom-right",
+    "conversationMode": "voice-and-text",
+    "dismissible": true,
+    "actionText": "Talk to us",
+    "expandText": "Need help?",
+    "orbDebug": false,
+    "avatarImageUrl": "",
+    "secondaryLogoUrl": "",
+    "secondaryLogoSize": 42,
+    "secondaryLogoOffsetX": 18,
+    "secondaryLogoOffsetY": 51,
+    "secondaryLogoRounded": false,
+    "secondaryLogoShadow": false,
+    "providerText": "Provided by WingSpanAi.com.au",
+    "providerUrl": "https://wingspanai.com.au",
+    "providerIconUrl": "/wingspan-favicon.ico",
+    "providerIconSize": 12,
+    "providerOffsetY": 6,
+    "poweredByTextOverride": "Powered by GRABiT-Labs",
+    "useOrbColors": false,
+    "avatarOrbColor1": "#6D28D9",
+    "avatarOrbColor2": "#A855F7",
+    "useWidgetThemeColors": false,
+    "widgetBaseColor": "#FFFFFF",
+    "widgetBasePrimaryColor": "#000000",
+    "widgetBaseBorderColor": "#E5E7EB",
+    "widgetBaseSubtleColor": "#6B7280",
+    "widgetAccentColor": "#111827",
+    "widgetAccentPrimaryColor": "#FFFFFF",
+    "inputBoxShrinkPx": 6,
+    "inputTextLiftPx": 6,
+    "dynamicVariablesInput": "{\n  \"source\": \"convai-replica\",\n  \"build\": \"baseline\"\n}"
+  }
+};
+
+export default WingspanaiGeneratedBrandProfile;
