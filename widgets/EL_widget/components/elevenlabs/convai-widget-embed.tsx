@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 
-const EMBED_SCRIPT_SRC = 'https://unpkg.com/@elevenlabs/convai-widget-embed';
+const EMBED_SCRIPT_SRC = 'https://unpkg.com/@elevenlabs/convai-widget-embed@0.10.5/dist/index.js';
 const WIDGET_TAG_NAME = 'elevenlabs-convai';
 const CALL_EVENT_NAME = 'elevenlabs-convai:call';
 const EXPAND_EVENT_NAME = 'elevenlabs-agent:expand';
@@ -11,7 +11,7 @@ const INPUT_BASE_MIN_HEIGHT_ATTR = 'data-codex-input-base-min-height';
 const INPUT_BASE_HEIGHT_ATTR = 'data-codex-input-base-height';
 const INPUT_BASE_PADDING_TOP_ATTR = 'data-codex-input-base-padding-top';
 const INPUT_BASE_PADDING_BOTTOM_ATTR = 'data-codex-input-base-padding-bottom';
-const POWERED_BY_ELEVENLABS_PATTERN = /powered\s+by\s+elevenlabs\s+agents?/i;
+const POWERED_BY_ELEVENLABS_PATTERN = /powered\s+by\s+(elevenlabs(\s+agents?)?|elevenagents?)/i;
 
 type WidgetVariant = 'tiny' | 'compact' | 'full' | 'expanded';
 type WidgetPlacement =
@@ -99,7 +99,9 @@ export interface ConvAIWidgetEmbedProps {
   providerColor?: string;
   providerFontSize?: number;
   providerOffsetY?: number;
+  providerOffsetX?: number;
   poweredByTextOverride?: string;
+  agentNameOverride?: string;
   orbDebug?: boolean;
   inputBoxShrinkPx?: number;
   inputTextLiftPx?: number;
@@ -111,6 +113,16 @@ function normalizeWhitespace(value: string) {
   return value.replace(/\s+/g, ' ').trim();
 }
 
+function updateTextNodeIfMatch(node: Node, replacementText: string) {
+  if (node.nodeType !== Node.TEXT_NODE) return false;
+
+  const currentText = normalizeWhitespace(node.textContent ?? '');
+  if (!currentText || !POWERED_BY_ELEVENLABS_PATTERN.test(currentText)) return false;
+
+  node.textContent = replacementText;
+  return true;
+}
+
 function overridePoweredByLabel(shadowRoot: ShadowRoot, replacementText: string) {
   const replacement = replacementText.trim();
   if (!replacement) return;
@@ -120,6 +132,13 @@ function overridePoweredByLabel(shadowRoot: ShadowRoot, replacementText: string)
     const text = normalizeWhitespace(element.textContent ?? '');
     if (!text || !POWERED_BY_ELEVENLABS_PATTERN.test(text)) continue;
 
+    const textWalker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    let updatedTextNode = false;
+    while (textWalker.nextNode()) {
+      updatedTextNode =
+        updateTextNodeIfMatch(textWalker.currentNode, replacement) || updatedTextNode;
+    }
+
     const hasMatchingChild = Array.from(element.children).some((child) => {
       if (!(child instanceof HTMLElement)) return false;
       const childText = normalizeWhitespace(child.textContent ?? '');
@@ -127,12 +146,14 @@ function overridePoweredByLabel(shadowRoot: ShadowRoot, replacementText: string)
     });
     if (hasMatchingChild) continue;
 
-    if (text !== replacement) {
+    if (!updatedTextNode && text !== replacement) {
       element.textContent = replacement;
     }
     element.setAttribute('aria-label', replacement);
+    element.setAttribute('title', replacement);
   }
 }
+
 
 function setOptionalAttribute(element: HTMLElement, name: string, value?: string) {
   if (value && value.trim()) {
@@ -309,11 +330,13 @@ function placeProviderOverlayInInputGap({
   panelRect,
   inputRect,
   fallbackOffsetY,
+  centerXOffset = 0,
 }: {
   overlay: HTMLElement;
   panelRect: DOMRect;
   inputRect: DOMRect;
   fallbackOffsetY: number;
+  centerXOffset?: number;
 }) {
   overlay.style.display = 'inline-flex';
   overlay.style.visibility = 'hidden';
@@ -338,7 +361,7 @@ function placeProviderOverlayInInputGap({
   placeProviderOverlayWithinPanel({
     overlay,
     panelRect,
-    desiredCenterX: inputRect.left + inputRect.width / 2,
+    desiredCenterX: inputRect.left + inputRect.width / 2 + centerXOffset,
     desiredTop,
   });
 }
@@ -557,7 +580,9 @@ export function ConvAIWidgetEmbed({
   providerColor = 'rgba(15, 23, 42, 0.78)',
   providerFontSize = 11,
   providerOffsetY = 6,
+  providerOffsetX = 0,
   poweredByTextOverride,
+  agentNameOverride,
   orbDebug = false,
   inputBoxShrinkPx = 6,
   inputTextLiftPx = 6,
@@ -783,11 +808,26 @@ export function ConvAIWidgetEmbed({
     orbDebugLabel.style.font = '11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace';
     orbDebugLabel.style.whiteSpace = 'nowrap';
 
+    const agentNameOverlay = document.createElement('div');
+    agentNameOverlay.style.position = 'fixed';
+    agentNameOverlay.style.zIndex = '2147483647';
+    agentNameOverlay.style.pointerEvents = 'none';
+    agentNameOverlay.style.display = 'none';
+    agentNameOverlay.style.fontSize = '14px';
+    agentNameOverlay.style.fontWeight = '600';
+    agentNameOverlay.style.color = '#0f172a';
+    agentNameOverlay.style.whiteSpace = 'nowrap';
+    agentNameOverlay.style.transform = 'translate(-50%, -50%)';
+    agentNameOverlay.setAttribute('data-wingspan-agent-name', 'true');
+    if (agentNameOverride) {
+      agentNameOverlay.textContent = agentNameOverride.trim();
+    }
+
     let shadowObserver: MutationObserver | null = null;
     const poweredByOverrideText = poweredByTextOverride?.trim();
     let lastOrbDebugSignature = '';
     const shouldTrackWidgetMutations = Boolean(
-      secondaryLogoUrl || providerText || poweredByOverrideText || orbDebug
+      secondaryLogoUrl || providerText || poweredByOverrideText || agentNameOverride || orbDebug
     );
     const shouldHandleResize = Boolean(secondaryLogoUrl || providerText || orbDebug);
     const updateSecondaryLogoPosition = () => {
@@ -886,6 +926,11 @@ export function ConvAIWidgetEmbed({
       if (panelRect) {
         tuneBottomInputBox(shadowRoot, panelRect, inputBoxShrinkPx, inputTextLiftPx);
 
+        if (agentNameOverride) {
+          agentNameOverlay.style.left = `${Math.round(panelRect.left + panelRect.width / 2)}px`;
+          agentNameOverlay.style.top = `${Math.round(panelRect.top + 10)}px`;
+          agentNameOverlay.style.display = 'block';
+        }
         if (secondaryLogoUrl) {
           logoOverlay.style.left = `${Math.round(panelRect.left + secondaryLogoOffsetX)}px`;
           logoOverlay.style.top = `${Math.round(panelRect.top + secondaryLogoOffsetY)}px`;
@@ -899,12 +944,13 @@ export function ConvAIWidgetEmbed({
               panelRect,
               inputRect,
               fallbackOffsetY: providerOffsetY,
+              centerXOffset: providerOffsetX,
             });
           } else {
             placeProviderOverlayWithinPanel({
               overlay: providerOverlay,
               panelRect,
-              desiredCenterX: panelRect.left + panelRect.width / 2,
+              desiredCenterX: panelRect.left + panelRect.width / 2 + providerOffsetX,
               desiredTop: panelRect.bottom - 20 - providerOffsetY,
             });
           }
@@ -912,8 +958,9 @@ export function ConvAIWidgetEmbed({
         return;
       }
 
-      // If expanded panel is not detected, treat widget as collapsed and hide provider text.
+      // If expanded panel is not detected, treat widget as collapsed and hide overlays.
       providerOverlay.style.display = 'none';
+      agentNameOverlay.style.display = 'none';
 
       // Fallback: anchor logo to host element to keep it visible if panel detection fails.
       const hostRect = widgetElement.getBoundingClientRect();
@@ -936,6 +983,9 @@ export function ConvAIWidgetEmbed({
       }
       if (providerText) {
         document.body.appendChild(providerOverlay);
+      }
+      if (agentNameOverride) {
+        document.body.appendChild(agentNameOverlay);
       }
       if (orbDebug) {
         document.body.appendChild(orbDebugOverlay);
@@ -974,6 +1024,9 @@ export function ConvAIWidgetEmbed({
       }
       if (providerOverlay.parentNode) {
         providerOverlay.parentNode.removeChild(providerOverlay);
+      }
+      if (agentNameOverlay.parentNode) {
+        agentNameOverlay.parentNode.removeChild(agentNameOverlay);
       }
       if (orbDebugOverlay.parentNode) {
         orbDebugOverlay.parentNode.removeChild(orbDebugOverlay);
@@ -1017,7 +1070,9 @@ export function ConvAIWidgetEmbed({
     providerColor,
     providerFontSize,
     providerOffsetY,
+    providerOffsetX,
     poweredByTextOverride,
+    agentNameOverride,
     orbDebug,
     inputBoxShrinkPx,
     inputTextLiftPx,

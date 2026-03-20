@@ -105,6 +105,8 @@ type EventLogItem = {
 const PLAYGROUND_SETTINGS_STORAGE_KEY = 'convai-replica-playground-settings-v1';
 const REPO_BRAND_PROFILES_API_PATH = '/api/brand-profiles';
 const REPO_BRAND_PROFILES_EXPORT_TS_API_PATH = '/api/brand-profiles/export-ts';
+const DEPLOY_API_PATH = '/api/deploy';
+const HOSTED_WIDGET_DEV_URL = 'https://wingspanai-widgets-dev.web.app/';
 
 type ConvAIReplicaSettings = ConvAIReplicaPresetSettings & {
   repoPresetId?: string;
@@ -182,7 +184,10 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
   const [providerIconUrl, setProviderIconUrl] = React.useState('/wingspan-favicon.ico');
   const [providerIconSize, setProviderIconSize] = React.useState(12);
   const [providerOffsetY, setProviderOffsetY] = React.useState(6);
+  const [providerOffsetX, setProviderOffsetX] = React.useState(0);
+  const [providerOffsetXRaw, setProviderOffsetXRaw] = React.useState('0');
   const [poweredByTextOverride, setPoweredByTextOverride] = React.useState('Powered by GRABiT-Labs');
+  const [agentNameOverride, setAgentNameOverride] = React.useState('');
   const [useOrbColors, setUseOrbColors] = React.useState(true);
   const [avatarOrbColor1, setAvatarOrbColor1] = React.useState<string>(colorPresets[0].color1);
   const [avatarOrbColor2, setAvatarOrbColor2] = React.useState<string>(colorPresets[0].color2);
@@ -221,8 +226,12 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
   const [savedBrandProfiles, setSavedBrandProfiles] = React.useState<SavedBrandProfile[]>([]);
   const [selectedSavedBrandId, setSelectedSavedBrandId] = React.useState('');
   const [isRepoProfilesLoading, setIsRepoProfilesLoading] = React.useState(false);
+  const [isDeploying, setIsDeploying] = React.useState(false);
+  const [deployLog, setDeployLog] = React.useState<string[]>([]);
+  const [deployStatus, setDeployStatus] = React.useState<'idle' | 'success' | 'error'>('idle');
   const eventLogIdRef = React.useRef(0);
   const saveStatusTimeoutRef = React.useRef<number | null>(null);
+  const deployLogRef = React.useRef<HTMLDivElement>(null);
 
   const dynamicVariablesResult = React.useMemo(
     () => parseDynamicVariables(dynamicVariablesInput),
@@ -345,8 +354,16 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       if (typeof saved.providerOffsetY === 'number') {
         setProviderOffsetY(Math.min(80, Math.max(-40, Math.round(saved.providerOffsetY))));
       }
+      if (typeof saved.providerOffsetX === 'number') {
+        const clamped = Math.min(200, Math.max(-200, Math.round(saved.providerOffsetX)));
+        setProviderOffsetX(clamped);
+        setProviderOffsetXRaw(String(clamped));
+      }
       if (typeof saved.poweredByTextOverride === 'string') {
         setPoweredByTextOverride(saved.poweredByTextOverride);
+      }
+      if (typeof saved.agentNameOverride === 'string') {
+        setAgentNameOverride(saved.agentNameOverride);
       }
       if (typeof saved.useOrbColors === 'boolean') setUseOrbColors(saved.useOrbColors);
       if (typeof saved.avatarOrbColor1 === 'string') setAvatarOrbColor1(saved.avatarOrbColor1);
@@ -400,7 +417,9 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       providerIconUrl,
       providerIconSize,
       providerOffsetY,
+      providerOffsetX,
       poweredByTextOverride,
+      agentNameOverride,
       useOrbColors,
       avatarOrbColor1,
       avatarOrbColor2,
@@ -437,7 +456,9 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
       providerIconUrl,
       providerIconSize,
       providerOffsetY,
+      providerOffsetX,
       poweredByTextOverride,
+      agentNameOverride,
       useOrbColors,
       avatarOrbColor1,
       avatarOrbColor2,
@@ -662,6 +683,109 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
     settingsSnapshot,
     setTemporaryStatus,
   ]);
+
+  const handleDeployToHosted = React.useCallback(async () => {
+    setIsDeploying(true);
+    setDeployLog([]);
+    setDeployStatus('idle');
+
+    try {
+      const id = sanitizePresetId(newPresetIdInput);
+      const label = newPresetLabelInput.trim() || 'New Client';
+      const description = newPresetDescriptionInput.trim() || `${label} preset.`;
+      const profile: SavedBrandProfile = {
+        id,
+        label,
+        description,
+        settings: toProfileSettings(settingsSnapshot),
+      };
+
+      const saveResponse = await fetch(REPO_BRAND_PROFILES_API_PATH, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+      });
+      if (!saveResponse.ok) {
+        throw new Error('Could not save brand profile before deploy.');
+      }
+
+      setNewPresetIdInput(id);
+      await refreshRepoBrandProfiles({ preferredId: id, silent: true });
+      setDeployLog((prev) => [...prev, `[setup] Auto-saved profile: ${id}`]);
+      setTemporaryStatus(`Auto-saved ${label} before deploy.`);
+
+      const response = await fetch(DEPLOY_API_PATH, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ environment: 'dev' }),
+      });
+
+      if (!response.body) throw new Error('No response body from deploy endpoint.');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let succeeded = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() ?? '';
+        for (const part of parts) {
+          const dataLine = part.split('\n').find((l) => l.startsWith('data: '));
+          if (dataLine) {
+            try {
+              const text = JSON.parse(dataLine.slice(6)) as string;
+              setDeployLog((prev) => [...prev, text]);
+              if (text.startsWith('[done]')) succeeded = true;
+            } catch {
+              // ignore malformed SSE lines
+            }
+          }
+        }
+      }
+
+      setDeployStatus(succeeded ? 'success' : 'error');
+    } catch (err) {
+      setDeployLog((prev) => [...prev, `[error] ${String(err)}`]);
+      setDeployStatus('error');
+    } finally {
+      setIsDeploying(false);
+    }
+  }, [
+    newPresetDescriptionInput,
+    newPresetIdInput,
+    newPresetLabelInput,
+    refreshRepoBrandProfiles,
+    settingsSnapshot,
+    setTemporaryStatus,
+  ]);
+
+  React.useEffect(() => {
+    if (deployLogRef.current) {
+      deployLogRef.current.scrollTop = deployLogRef.current.scrollHeight;
+    }
+  }, [deployLog]);
+
+  const handleSelectSavedBrandProfile = React.useCallback(
+    (profileId: string) => {
+      setSelectedSavedBrandId(profileId);
+
+      const selectedProfile = savedBrandProfiles.find((profile) => profile.id === profileId);
+      if (!selectedProfile) {
+        return;
+      }
+
+      applySavedSettings(selectedProfile.settings);
+      setNewPresetIdInput(selectedProfile.id);
+      setNewPresetLabelInput(selectedProfile.label);
+      setNewPresetDescriptionInput(selectedProfile.description);
+      setTemporaryStatus(`Brand profile loaded: ${selectedProfile.label}.`);
+    },
+    [applySavedSettings, savedBrandProfiles, setTemporaryStatus]
+  );
 
   const handleLoadBrandProfile = React.useCallback(() => {
     if (!selectedSavedBrandProfile) {
@@ -929,7 +1053,7 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
         <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
           <div className="space-y-2">
             <Label htmlFor="saved-brand-profiles">Repo brand profiles (logos included)</Label>
-            <Select value={selectedSavedBrandId} onValueChange={setSelectedSavedBrandId}>
+            <Select value={selectedSavedBrandId} onValueChange={handleSelectSavedBrandProfile}>
               <SelectTrigger id="saved-brand-profiles" className="w-full">
                 <SelectValue
                   placeholder={isRepoProfilesLoading ? 'Loading repo profiles...' : 'No repo profiles yet'}
@@ -951,6 +1075,14 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
             <Button type="button" variant="secondary" onClick={() => void handleSaveBrandProfile()}>
               Save brand profile
             </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={isDeploying}
+              onClick={() => void handleDeployToHosted()}
+            >
+              {isDeploying ? 'Deploying…' : 'Deploy to hosted'}
+            </Button>
             <Button type="button" variant="secondary" onClick={() => void handleSaveTsPreset()}>
               Save TS preset
             </Button>
@@ -968,6 +1100,52 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
               Refresh repo list
             </Button>
           </div>
+
+          {(deployLog.length > 0 || isDeploying) && (
+            <div className="space-y-1 pt-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                Deploy log
+                {deployStatus === 'success' && (
+                  <span className="ml-2 text-green-600">&#10003; Complete</span>
+                )}
+                {deployStatus === 'error' && (
+                  <span className="ml-2 text-destructive">&#10007; Failed</span>
+                )}
+              </p>
+              <div
+                ref={deployLogRef}
+                className="h-40 overflow-y-auto rounded border bg-muted p-2 font-mono text-xs"
+              >
+                {deployLog.map((line, i) => (
+                  <div
+                    key={i}
+                    className={
+                      line.startsWith('[error]')
+                        ? 'text-destructive'
+                        : line.startsWith('[done]')
+                          ? 'text-green-600'
+                          : 'text-muted-foreground'
+                    }
+                  >
+                    {line}
+                  </div>
+                ))}
+                {isDeploying && (
+                  <div className="animate-pulse text-muted-foreground">…</div>
+                )}
+              </div>
+              {deployStatus === 'success' && (
+                <a
+                  href={HOSTED_WIDGET_DEV_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 underline"
+                >
+                  Open {HOSTED_WIDGET_DEV_URL} &#8599;
+                </a>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
@@ -1337,6 +1515,35 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
             />
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="provider-offset-x">Provider offset X</Label>
+            <Input
+              id="provider-offset-x"
+              type="text"
+              inputMode="numeric"
+              value={providerOffsetXRaw}
+              onChange={(event) => {
+                const raw = event.target.value;
+                setProviderOffsetXRaw(raw);
+                const num = Number(raw);
+                if (Number.isFinite(num)) {
+                  setProviderOffsetX(Math.min(200, Math.max(-200, Math.round(num))));
+                }
+              }}
+              onBlur={() => setProviderOffsetXRaw(String(providerOffsetX))}
+            />
+          </div>
+
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="agent-name-override">Agent / company name</Label>
+            <Input
+              id="agent-name-override"
+              value={agentNameOverride}
+              onChange={(event) => setAgentNameOverride(event.target.value)}
+              placeholder="e.g. BioTune Chiropractic"
+            />
+          </div>
+
           <div className="space-y-2 md:col-span-2">
             <Label htmlFor="powered-by-text-override">Powered-by text override</Label>
             <Input
@@ -1654,7 +1861,9 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
             providerIconUrl={providerIconUrl || undefined}
             providerIconSize={providerIconSize}
             providerOffsetY={providerOffsetY}
+            providerOffsetX={providerOffsetX}
             poweredByTextOverride={poweredByTextOverride || undefined}
+            agentNameOverride={agentNameOverride || undefined}
             orbDebug={orbDebug}
             inputBoxShrinkPx={inputBoxShrinkPx}
             inputTextLiftPx={inputTextLiftPx}
@@ -1687,3 +1896,5 @@ export default function ConvAIReplicaClient({ agentId }: ConvAIReplicaClientProp
     </div>
   );
 }
+
+

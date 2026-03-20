@@ -25,6 +25,7 @@ export const biotuneBrandProfile: ConvAIReplicaPreset = {
     providerIconUrl: '/wingspan-favicon.ico',
     providerIconSize: 12,
     providerOffsetY: 6,
+    providerOffsetX: -50,
     poweredByTextOverride: 'Powered by GRABiT-Labs',
     useOrbColors: true,
     avatarOrbColor1: '#16A34A',

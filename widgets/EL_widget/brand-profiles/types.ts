@@ -19,6 +19,7 @@ export type ConvAIReplicaPresetSettings = {
   providerIconUrl: string;
   providerIconSize: number;
   providerOffsetY: number;
+  providerOffsetX: number;
   poweredByTextOverride: string;
   useOrbColors: boolean;
   avatarOrbColor1: string;
